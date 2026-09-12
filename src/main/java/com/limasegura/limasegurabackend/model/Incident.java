@@ -17,38 +17,36 @@ import java.time.LocalDate;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Incidente {
+public class Incident {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "zona_id", nullable = false)
+    @JoinColumn(name = "zone_id", nullable = false)
     @NotNull(message = "El incidente debe tener una zona")
-    private Zona zona;
+    private Zone zone;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "categoria_id", nullable = false)
+    @JoinColumn(name = "category_id", nullable = false)
     @NotNull(message = "El incidente debe tener una categoria")
-    private Categoria categoria;
+    private Category category;
 
     @NotBlank(message = "La fuente es obligatoria")
     @Size(max = 50)
     @Column(nullable = false, length = 50)
-    private String fuente;
+    private String source;
 
     @NotNull(message = "La fecha del incidente es obligatoria")
     @Column(nullable = false)
-    private LocalDate fecha;
-
+    private LocalDate date;
 
     @NotNull(message = "La latitud es obligatoria")
     @Column(nullable = false)
-    private Double latitud;
+    private Double latitude;
 
     @NotNull(message = "La longitud es obligatoria")
     @Column(nullable = false)
-    private Double longitud;
-
+    private Double longitude;
 }

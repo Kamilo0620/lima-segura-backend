@@ -20,7 +20,7 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Usuario {
+public class User {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -29,7 +29,7 @@ public class Usuario {
     @NotBlank(message = "El nombre es obligatorio")
     @Size(max = 100)
     @Column(nullable = false, length = 100)
-    private String nombre;
+    private String name;
 
     @NotBlank(message = "El correo es obligatorio")
     @Email(message = "El correo no tiene un formato valido")
@@ -42,13 +42,13 @@ public class Usuario {
     private String password;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now();
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Confirmacion> confirmaciones = new ArrayList<>();
+    private List<Confirmation> confirmations = new ArrayList<>();
 
     @OneToMany(mappedBy = "usuario", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Reporte> reportes = new ArrayList<>();
+    private List<Report> reports = new ArrayList<>();
 }

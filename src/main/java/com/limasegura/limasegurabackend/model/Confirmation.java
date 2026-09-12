@@ -12,30 +12,28 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "confirmaciones",
-        uniqueConstraints = @UniqueConstraint(columnNames = {"usuario_id", "reporte_id"})
+        uniqueConstraints = @UniqueConstraint(columnNames = {"user_id", "report_id"})
 )
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-
-public class Confirmacion {
+public class Confirmation {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "usuario_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false)
     @NotNull(message = "La confirmacion debe tener un usuario")
-    private Usuario usuario;
-
+    private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reporte_id", nullable = false)
+    @JoinColumn(name = "report_id", nullable = false)
     @NotNull(message = "La confirmacion debe tener un reporte")
-    private Reporte reporte;
+    private Report report;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime fecha = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now();
 }

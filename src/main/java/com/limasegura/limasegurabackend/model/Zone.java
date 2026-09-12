@@ -19,40 +19,39 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Zona {
+public class Zone {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-
     private Long id;
 
     @NotBlank(message = "El nombre de la zona es obligatorio")
     @Size(max = 100)
     @Column(nullable = false, length = 100)
-    private String nombre;
+    private String name;
 
     @NotBlank(message = "El distrito es obligatorio")
     @Size(max = 100)
     @Column(nullable = false, length = 100)
-    private String distrito;
+    private String district;
 
     @NotNull(message = "La latitud es obligatoria")
     @Column(nullable = false)
-    private Double latitud;
+    private Double latitude;
 
     @NotNull(message = "La longitud es obligatoria")
     @Column(nullable = false)
-    private Double longitud;
+    private Double longitude;
 
-    @OneToMany(mappedBy = "zona", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "zone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Reporte> reportes = new ArrayList<>();
+    private List<Report> reports = new ArrayList<>();
 
-    @OneToMany(mappedBy = "zona", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "zone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Incidente> incidentes = new ArrayList<>();
+    private List<Incident> incidents = new ArrayList<>();
 
-    @OneToMany(mappedBy = "zona", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "zone", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Prediccion> predicciones = new ArrayList<>();
-
+    private List<Prediction> predictions = new ArrayList<>();
 }

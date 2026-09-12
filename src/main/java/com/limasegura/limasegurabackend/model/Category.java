@@ -12,14 +12,14 @@ import lombok.Setter;
 import java.util.ArrayList;
 import java.util.List;
 
-
 @Entity
 @Table(name = "categorias")
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Categoria {
+public class Category {
+
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
@@ -27,17 +27,17 @@ public class Categoria {
     @NotBlank(message = "El nombre de la categoria es obligatorio")
     @Size(max = 50)
     @Column(nullable = false, unique = true, length = 50)
-    private String nombre;
+    private String name;
 
     @Size(max = 255)
     @Column(length = 255)
-    private String descripcion;
+    private String description;
 
-    @OneToMany(mappedBy = "categoria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Reporte> reportes = new ArrayList<>();
+    private List<Report> reports = new ArrayList<>();
 
-    @OneToMany(mappedBy = "categoria", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Incidente> incidentes = new ArrayList<>();
+    private List<Incident> incidents = new ArrayList<>();
 }

@@ -20,55 +20,48 @@ import java.util.List;
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
-public class Reporte {
+public class Report {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "usuario_id", nullable = false)
+    @JoinColumn(name = "user_id", nullable = false)
     @NotNull(message = "El reporte debe tener un usuario")
-    private Usuario usuario;
+    private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "zona_id", nullable = false)
+    @JoinColumn(name = "zone_id", nullable = false)
     @NotNull(message = "El reporte debe tener una zona")
-    private Zona zona;
+    private Zone zone;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "categoria_id", nullable = false)
+    @JoinColumn(name = "category_id", nullable = false)
     @NotNull(message = "El reporte debe tener una categoria")
-    private Categoria categoria;
-
+    private Category category;
 
     @NotBlank(message = "La descripcion es obligatoria")
     @Size(max = 500)
     @Column(nullable = false, length = 500)
-    private String descripcion;
-
+    private String description;
 
     @NotNull(message = "La latitud es obligatoria")
     @Column(nullable = false)
-    private Double latitud;
+    private Double latitude;
 
     @NotNull(message = "La longitud es obligatoria")
     @Column(nullable = false)
-    private Double longitud;
+    private Double longitude;
 
     @Enumerated(EnumType.STRING)
     @Column(nullable = false, length = 20)
-    private EstadoReporte estado = EstadoReporte.PENDIENTE;
+    private ReportStatus status = ReportStatus.PENDING;
 
     @Column(nullable = false, updatable = false)
-    private LocalDateTime fechaCreacion = LocalDateTime.now();
+    private LocalDateTime createdAt = LocalDateTime.now();
 
-    @OneToMany(mappedBy = "reporte", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @OneToMany(mappedBy = "report", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     @JsonIgnore
-    private List<Confirmacion> confirmaciones = new ArrayList<>();
-
-
-
-
+    private List<Confirmation> confirmations = new ArrayList<>();
 }
