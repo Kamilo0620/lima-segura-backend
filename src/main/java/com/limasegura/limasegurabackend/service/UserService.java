@@ -1,5 +1,7 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.DuplicateResourceException;
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.User;
 import com.limasegura.limasegurabackend.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -17,7 +19,7 @@ public class UserService {
 
     public User create(User user) {
         if (userRepository.existsByEmail(user.getEmail())) {
-            throw new IllegalArgumentException("Ya existe un usuario con ese email");
+            throw new DuplicateResourceException("Ya existe un usuario con ese email");
         }
         user.setCreatedAt(LocalDateTime.now());
         return userRepository.save(user);
@@ -25,7 +27,7 @@ public class UserService {
 
     public User getById(Long id) {
         return userRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + id));
     }
 
     public List<User> getAll() {

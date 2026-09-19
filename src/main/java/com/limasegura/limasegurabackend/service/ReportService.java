@@ -1,12 +1,13 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.InvalidOperationException;
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.*;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -22,11 +23,11 @@ public class ReportService {
 
     public Report create(Long userId, Long zoneId, Long categoryId, String description, Double latitude, Double longitude) {
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con id: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
         Zone zone = zoneRepository.findById(zoneId)
-                .orElseThrow(() -> new NoSuchElementException("Zona no encontrada con id: " + zoneId));
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con id: " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + categoryId));
 
         Report report = new Report();
         report.setUser(user);
@@ -41,7 +42,7 @@ public class ReportService {
 
     public Report getById(Long id) {
         return reportRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Reporte no encontrado con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado con id: " + id));
     }
 
     public List<Report> getAll() {
@@ -59,11 +60,11 @@ public class ReportService {
     public void confirm(Long reportId, Long userId) {
         Report report = getById(reportId);
         User user = userRepository.findById(userId)
-                .orElseThrow(() -> new NoSuchElementException("Usuario no encontrado con id: " + userId));
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
 
         boolean alreadyConfirmed = confirmationRepository.findByUserIdAndReportId(userId, reportId).isPresent();
         if (alreadyConfirmed) {
-            throw new IllegalStateException("Este usuario ya confirmo este reporte");
+            throw new InvalidOperationException("Este usuario ya confirmo este reporte");
         }
 
         Confirmation confirmation = new Confirmation();

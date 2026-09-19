@@ -1,5 +1,6 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Zone;
 import com.limasegura.limasegurabackend.repository.ZoneRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,7 +21,7 @@ public class ZoneService {
 
     public Zone getById(Long id) {
         return zoneRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Zona no encontrada con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + id));
     }
 
     public List<Zone> getAll() {

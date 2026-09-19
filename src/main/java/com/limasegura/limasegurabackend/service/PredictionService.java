@@ -1,5 +1,6 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Prediction;
 import com.limasegura.limasegurabackend.model.RiskLevel;
 import com.limasegura.limasegurabackend.model.Zone;
@@ -9,7 +10,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
-import java.util.NoSuchElementException;
 import java.util.Optional;
 
 @Service
@@ -21,7 +21,7 @@ public class PredictionService {
 
     public Prediction generate(Long zoneId, DayOfWeek dayOfWeek, Integer hour, Double score) {
         Zone zone = zoneRepository.findById(zoneId)
-                .orElseThrow(() -> new NoSuchElementException("Zona no encontrada con id: " + zoneId));
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
 
         Prediction prediction = new Prediction();
         prediction.setZone(zone);

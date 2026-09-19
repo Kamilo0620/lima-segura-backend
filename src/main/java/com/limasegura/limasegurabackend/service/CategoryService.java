@@ -1,12 +1,13 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.DuplicateResourceException;
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Category;
 import com.limasegura.limasegurabackend.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -16,14 +17,14 @@ public class CategoryService {
 
     public Category create(Category category) {
         if (categoryRepository.existsByName(category.getName())) {
-            throw new IllegalArgumentException("Ya existe una categoria con ese nombre");
+            throw new DuplicateResourceException("Ya existe una categoria con ese nombre");
         }
         return categoryRepository.save(category);
     }
 
     public Category getById(Long id) {
         return categoryRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + id));
     }
 
     public List<Category> getAll() {

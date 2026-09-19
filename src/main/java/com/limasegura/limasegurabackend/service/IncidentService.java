@@ -1,5 +1,6 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Category;
 import com.limasegura.limasegurabackend.model.Incident;
 import com.limasegura.limasegurabackend.model.Zone;
@@ -11,7 +12,6 @@ import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.util.List;
-import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -23,9 +23,9 @@ public class IncidentService {
 
     public Incident create(Long zoneId, Long categoryId, String source, LocalDate date, Double latitude, Double longitude) {
         Zone zone = zoneRepository.findById(zoneId)
-                .orElseThrow(() -> new NoSuchElementException("Zona no encontrada con id: " + zoneId));
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
         Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new NoSuchElementException("Categoria no encontrada con id: " + categoryId));
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + categoryId));
 
         Incident incident = new Incident();
         incident.setZone(zone);
@@ -40,7 +40,7 @@ public class IncidentService {
 
     public Incident getById(Long id) {
         return incidentRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("Incidente no encontrado con id: " + id));
+                .orElseThrow(() -> new ResourceNotFoundException("Incidente no encontrado con id: " + id));
     }
 
     public List<Incident> getAll() {
