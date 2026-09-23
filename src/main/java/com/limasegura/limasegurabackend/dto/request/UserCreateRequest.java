@@ -10,7 +10,7 @@ import lombok.*;
 @Getter @Setter
 public class UserCreateRequest{
         @NotBlank(message="El nombre es obligatorio")
-        @Size(max=200,message="El nombre no puede superar los 100 caracteres")
+        @Size(max=100,message="El nombre no puede superar los 100 caracteres")
         String name;
         @NotBlank(message="El correo es obligatorio")
         @Email(message="El correo no tiene un formato válido")
