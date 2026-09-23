@@ -15,5 +15,4 @@ public class UserDetailResponse {
     private String email;
     private LocalDateTime createdAt;
     private int confirmationsCount;
-    //private List<ReportSummaryResponse> reports; //Implementaré ReportSummaryResponse luego
 }

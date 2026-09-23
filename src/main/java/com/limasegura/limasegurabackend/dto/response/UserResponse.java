@@ -14,11 +14,4 @@ public class UserResponse{
     private String name;
     private String email;
     private LocalDateTime createdAt;
-
-    public static UserResponse fromEntity(User user) {
-        if (user == null) {return null;}
-        return UserResponse.builder().id(user.getId())
-                .name(user.getName()).email(user.getEmail())
-                .createdAt(user.getCreatedAt()).build();
-    }
 }
