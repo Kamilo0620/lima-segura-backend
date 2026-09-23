@@ -15,4 +15,6 @@ public class UserDetailResponse {
     private String email;
     private LocalDateTime createdAt;
     private int confirmationsCount;
+    private int reportsCount;
+
 }
