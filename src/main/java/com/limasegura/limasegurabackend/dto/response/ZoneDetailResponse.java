@@ -9,6 +9,7 @@ import java.time.LocalDateTime;
 @Setter @Getter
 @Builder
 public class ZoneDetailResponse {
+    private Long id;
     private String name;
     private String district;
     private Double latitude;

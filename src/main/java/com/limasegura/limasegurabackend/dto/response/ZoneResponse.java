@@ -7,7 +7,7 @@ import lombok.*;
 @Getter @Setter
 @Builder
 public class ZoneResponse {
-
+    private Long id;
     private String name;
     private String district;
     private Double latitude;
