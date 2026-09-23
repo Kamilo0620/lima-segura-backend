@@ -2,15 +2,16 @@ package com.limasegura.limasegurabackend.dto.response;
 
 import lombok.*;
 
-@AllArgsConstructor
-@NoArgsConstructor
-@Getter @Setter
-@Builder
-public class ZoneResponse {
+import java.time.LocalDateTime;
 
+@NoArgsConstructor
+@AllArgsConstructor
+@Setter @Getter
+@Builder
+public class ZoneDetailResponse {
     private String name;
     private String district;
     private Double latitude;
     private Double longitude;
-
+    private int incidentsCount;
 }
