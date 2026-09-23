@@ -17,6 +17,6 @@ public class UserCreateRequest{
         @Size(max=150,message="El correo no puede superar los 150 caracteres")
         String email;
         @NotBlank(message="La contraseña es obligatoria")
-        @Size(min=12,message="La contraseña debe tener al menos 8 caracteres")
+        @Size(min=12,message="La contraseña debe tener al menos 12 caracteres")
         String password;
 }
