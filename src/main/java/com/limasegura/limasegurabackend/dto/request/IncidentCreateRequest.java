@@ -12,9 +12,9 @@ import java.time.LocalDate;
 @Setter @Getter
 @Builder
 public class IncidentCreateRequest {
-    @NotNull(message = "El incidente debe tener una zona")
+    @NotNull(message = "El ID de la zona es obligatorio")
     private Long zoneId;
-    @NotNull(message = "El incidente debe tener una categoria")
+    @NotNull(message = "El ID de la categoría es obligatorio")
     private Long categoryId;
 
     @NotBlank(message = "La fuente es obligatoria")
