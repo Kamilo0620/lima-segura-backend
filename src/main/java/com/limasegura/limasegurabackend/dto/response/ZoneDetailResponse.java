@@ -13,4 +13,6 @@ public class ZoneDetailResponse {
     private Double latitude;
     private Double longitude;
     private int incidentsCount;
+    private int reportsCount;
+    private int predictionsCount;
 }
