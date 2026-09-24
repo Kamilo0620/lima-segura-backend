@@ -10,7 +10,16 @@ import lombok.*;
 @Setter @Getter
 @Builder
 public class ReportCreateRequest {
-    @NotBlank(message = "La descripcion es obligatoria")
+    @NotNull(message="El ID del usuario es obligatorio")
+    private Long userId;
+
+    @NotNull(message="El ID de la zona es obligatorio")
+    private Long zoneId;
+
+    @NotNull(message="El ID de la categoría es obligatorio")
+    private Long categoryId;
+
+    @NotBlank(message="La descripcion es obligatoria")
     @Size(max = 500,message="La descripción del reporte no debe superar los 500 caracteres")
     private String description;
 

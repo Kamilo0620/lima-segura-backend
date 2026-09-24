@@ -20,4 +20,7 @@ public class ReportDetailResponse {
     private LocalDateTime createdAt;
     private List<Confirmation> confirmations;
     private int confirmationsCount;
+    private Long userId;
+    private Long zoneId;
+    private Long categoryId;
 }

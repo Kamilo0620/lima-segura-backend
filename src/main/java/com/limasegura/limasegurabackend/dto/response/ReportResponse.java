@@ -1,6 +1,7 @@
 package com.limasegura.limasegurabackend.dto.response;
 
 import com.limasegura.limasegurabackend.model.ReportStatus;
+import jakarta.validation.constraints.NotNull;
 import lombok.*;
 
 
@@ -14,4 +15,7 @@ public class ReportResponse {
     private Double latitude;
     private Double longitude;
     private ReportStatus status;
+    private Long userId;
+    private Long zoneId;
+    private Long categoryId;
 }
