@@ -2,8 +2,6 @@ package com.limasegura.limasegurabackend.dto.response;
 
 import lombok.*;
 
-import java.time.LocalDateTime;
-
 @NoArgsConstructor
 @AllArgsConstructor
 @Setter @Getter

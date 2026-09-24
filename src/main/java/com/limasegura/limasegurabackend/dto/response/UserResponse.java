@@ -1,6 +1,5 @@
 package com.limasegura.limasegurabackend.dto.response;
 
-import com.limasegura.limasegurabackend.model.User;
 import lombok.*;
 
 import java.time.LocalDateTime;
