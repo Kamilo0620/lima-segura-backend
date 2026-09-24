@@ -1,24 +1,32 @@
 package com.limasegura.limasegurabackend.event;
 
+import com.limasegura.limasegurabackend.service.EmailService;
+import lombok.RequiredArgsConstructor;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 
 @Component
+@RequiredArgsConstructor
 public class ReportEventListener {
 
-    @Async // <--- Hace que el método se ejecute en un hilo asíncrono
-    @EventListener // <--- Escucha la publicación del evento
-    public void handleReportCreated(ReportCreatedEvent event) {
-        System.out.println("-> [ASYNC] Evento capturado en hilo: " + Thread.currentThread().getName());
-        System.out.println("-> [ASYNC] Procesando actualización para reporte ID: " + event.getReport().getId());
+    private static final Logger logger = LoggerFactory.getLogger(ReportEventListener.class);
 
-        try {
-            // Simulamos una tarea pesada (ej. recalcular riesgo de la zona o notificar)
-            Thread.sleep(3000);
-            System.out.println("-> [ASYNC] Tarea en segundo plano completada con éxito.");
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
+    private final EmailService emailService;
+
+    @Async
+    @EventListener
+    public void handleReportCreated(ReportCreatedEvent event) {
+        logger.info("Procesando evento de reporte creado, id: {}", event.getReport().getId());
+        emailService.sendReportCreatedEmail(event.getReport());
+    }
+
+    @Async
+    @EventListener
+    public void handleReportValidated(ReportValidatedEvent event) {
+        logger.info("Procesando evento de reporte validado, id: {}", event.getReport().getId());
+        emailService.sendReportValidatedEmail(event.getReport());
     }
 }

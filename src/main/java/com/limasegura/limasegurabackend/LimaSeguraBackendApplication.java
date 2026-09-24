@@ -5,7 +5,7 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.scheduling.annotation.EnableAsync;
 
 @SpringBootApplication
-@EnableAsync // Habilita el procesamiento asíncrono
+@EnableAsync
 public class LimaSeguraBackendApplication {
 
 	public static void main(String[] args) {

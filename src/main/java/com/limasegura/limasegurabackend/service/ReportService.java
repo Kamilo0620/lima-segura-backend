@@ -1,42 +1,37 @@
 package com.limasegura.limasegurabackend.service;
 
 import com.limasegura.limasegurabackend.event.ReportCreatedEvent;
-import com.limasegura.limasegurabackend.model.Report;
-import com.limasegura.limasegurabackend.repository.CategoryRepository;
-import com.limasegura.limasegurabackend.repository.ReportRepository;
-import com.limasegura.limasegurabackend.repository.UserRepository;
-import com.limasegura.limasegurabackend.repository.ZoneRepository;
+import com.limasegura.limasegurabackend.event.ReportValidatedEvent;
+import com.limasegura.limasegurabackend.exception.InvalidOperationException;
+import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
+import com.limasegura.limasegurabackend.model.*;
+import com.limasegura.limasegurabackend.repository.*;
+import lombok.RequiredArgsConstructor;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
-import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
+@RequiredArgsConstructor
 public class ReportService {
+
+    private static final int CONFIRMATIONS_TO_VALIDATE = 3;
 
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
     private final ZoneRepository zoneRepository;
     private final CategoryRepository categoryRepository;
+    private final ConfirmationRepository confirmationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public ReportService(ReportRepository reportRepository,
-                         UserRepository userRepository,
-                         ZoneRepository zoneRepository,
-                         CategoryRepository categoryRepository,
-                         ApplicationEventPublisher eventPublisher) {
-        this.reportRepository = reportRepository;
-        this.userRepository = userRepository;
-        this.zoneRepository = zoneRepository;
-        this.categoryRepository = categoryRepository;
-        this.eventPublisher = eventPublisher;
-    }
-
     public Report create(Long userId, Long zoneId, Long categoryId, String description, Double latitude, Double longitude) {
-        var user = userRepository.findById(userId).orElseThrow();
-        var zone = zoneRepository.findById(zoneId).orElseThrow();
-        var category = categoryRepository.findById(categoryId).orElseThrow();
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
+        Zone zone = zoneRepository.findById(zoneId)
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
+        Category category = categoryRepository.findById(categoryId)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + categoryId));
 
         Report report = new Report();
         report.setUser(user);
@@ -45,18 +40,17 @@ public class ReportService {
         report.setDescription(description);
         report.setLatitude(latitude);
         report.setLongitude(longitude);
-        report.setCreatedAt(LocalDateTime.now());
 
         Report savedReport = reportRepository.save(report);
 
-        // Publicar el evento de forma asíncrona
         eventPublisher.publishEvent(new ReportCreatedEvent(savedReport));
 
         return savedReport;
     }
 
     public Report getById(Long id) {
-        return reportRepository.findById(id).orElseThrow();
+        return reportRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado con id: " + id));
     }
 
     public List<Report> getAll() {
@@ -71,11 +65,31 @@ public class ReportService {
         return reportRepository.findByUserId(userId);
     }
 
-    public void confirm(Long id, Long userId) {
-        // Lógica de confirmación existente
+    public void confirm(Long reportId, Long userId) {
+        Report report = getById(reportId);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
+
+        boolean alreadyConfirmed = confirmationRepository.findByUserIdAndReportId(userId, reportId).isPresent();
+        if (alreadyConfirmed) {
+            throw new InvalidOperationException("Este usuario ya confirmo este reporte");
+        }
+
+        Confirmation confirmation = new Confirmation();
+        confirmation.setUser(user);
+        confirmation.setReport(report);
+        confirmationRepository.save(confirmation);
+
+        long totalConfirmations = confirmationRepository.countByReportId(reportId);
+        if (totalConfirmations >= CONFIRMATIONS_TO_VALIDATE) {
+            report.setStatus(ReportStatus.VALIDATED);
+            reportRepository.save(report);
+            eventPublisher.publishEvent(new ReportValidatedEvent(report));
+        }
     }
 
     public void delete(Long id) {
-        reportRepository.deleteById(id);
+        Report existing = getById(id);
+        reportRepository.delete(existing);
     }
 }
