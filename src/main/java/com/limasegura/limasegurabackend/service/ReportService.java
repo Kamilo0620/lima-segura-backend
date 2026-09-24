@@ -1,10 +1,13 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.event.ReportCreatedEvent;
+import com.limasegura.limasegurabackend.event.ReportValidatedEvent;
 import com.limasegura.limasegurabackend.exception.InvalidOperationException;
 import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -20,6 +23,7 @@ public class ReportService {
     private final ZoneRepository zoneRepository;
     private final CategoryRepository categoryRepository;
     private final ConfirmationRepository confirmationRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Report create(Long userId, Long zoneId, Long categoryId, String description, Double latitude, Double longitude) {
         User user = userRepository.findById(userId)
@@ -37,7 +41,11 @@ public class ReportService {
         report.setLatitude(latitude);
         report.setLongitude(longitude);
 
-        return reportRepository.save(report);
+        Report savedReport = reportRepository.save(report);
+
+        eventPublisher.publishEvent(new ReportCreatedEvent(savedReport));
+
+        return savedReport;
     }
 
     public Report getById(Long id) {
@@ -76,6 +84,7 @@ public class ReportService {
         if (totalConfirmations >= CONFIRMATIONS_TO_VALIDATE) {
             report.setStatus(ReportStatus.VALIDATED);
             reportRepository.save(report);
+            eventPublisher.publishEvent(new ReportValidatedEvent(report));
         }
     }
 

@@ -1,0 +1,810 @@
+{
+  "info": {
+    "_postman_id": "7fe1c9bc-35cb-4f5e-8424-b3a6fd07d426",
+    "name": "Lima Segura",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "37809014"
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Register User",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"name\": \"Test User\", \r\n    \"email\": \"test@limasegura.com\", \r\n    \"password\": \"test123\" \r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/register",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "register"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.environment.set(\"token\", pm.response.json().token);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": " { \r\n    \"email\": \"test@limasegura.com\", \r\n    \"password\": \"test123\" \r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Registro y autenticación de usuarios mediante JWT. Ejecutar \"Login\" primero para guardar el token automáticamente en la variable {{token}}."
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "Get All Users",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get User By Id",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update User",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"name\": \"Test Actualizado\", \r\n    \"email\": \"test@limasegura.com\", \r\n    \"password\": \"test123\"\r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/users/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "users",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete User",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Gestión de usuarios registrados. Consultar todos los usuarios requiere rol ADMIN."
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "Create Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}} ",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": " { \r\n    \"name\": \"Robo\", \r\n    \"description\": \"Sustraccion con violencia o amenaza\" }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/categories",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "categories"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Category By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"name\": \"Robo agravado\", \r\n    \"description\": \"Actualizado\" \r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/categories/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "categories",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Category",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/categories/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "categories",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Gestión de categorías de delito (robo, hurto, agresión, etc.) usadas para clasificar reportes e incidentes."
+    },
+    {
+      "name": "Zones",
+      "item": [
+        {
+          "name": "Create Zone",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"name\": \"Zona Test\", \r\n    \"district\": \"Barranco\", \r\n    \"latitude\": -12.14, \r\n    \"longitude\": -77.02 \r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/zones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "zones"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Zones",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Zone By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Update Zone",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{ \r\n    \"name\": \"Zona Test Actualizada\", \r\n    \"district\": \"Barranco\", \r\n    \"latitude\": -12.14, \r\n    \"longitude\": -77.02 \r\n    }",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/zones/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "zones",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Zone",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/zones/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "zones",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Gestión de zonas geográficas de análisis. Crear, actualizar y eliminar zonas requiere rol ADMIN."
+    },
+    {
+      "name": "Reports",
+      "item": [
+        {
+          "name": "Create Report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports?userId=1&zoneId=1&categoryId=1&description=Robo reportado&latitude=-12.14&longitude=-77.02",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "1"
+                },
+                {
+                  "key": "zoneId",
+                  "value": "1"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "1"
+                },
+                {
+                  "key": "description",
+                  "value": "Robo reportado"
+                },
+                {
+                  "key": "latitude",
+                  "value": "-12.14"
+                },
+                {
+                  "key": "longitude",
+                  "value": "-77.02"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Reports",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Report By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Confirm Report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports/1/confirm?userId=2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "1",
+                "confirm"
+              ],
+              "query": [
+                {
+                  "key": "userId",
+                  "value": "2"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Report",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/reports/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "reports",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Reportes ciudadanos de inseguridad. Un reporte pasa de PENDING a VALIDATED automáticamente al reunir 3 confirmaciones de distintos usuarios, disparando un evento asíncrono que envía un correo de notificación."
+    },
+    {
+      "name": "Incidents",
+      "item": [
+        {
+          "name": "Create Incident",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/incidents?zoneId=2&categoryId=2&source=PNP&date=2026-01-15&latitude=-12.14&longitude=-77.02",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "incidents"
+              ],
+              "query": [
+                {
+                  "key": "zoneId",
+                  "value": "2"
+                },
+                {
+                  "key": "categoryId",
+                  "value": "2"
+                },
+                {
+                  "key": "source",
+                  "value": "PNP"
+                },
+                {
+                  "key": "date",
+                  "value": "2026-01-15"
+                },
+                {
+                  "key": "latitude",
+                  "value": "-12.14"
+                },
+                {
+                  "key": "longitude",
+                  "value": "-77.02"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get All Incidents",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Incident By Id",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Incident",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/incidents/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "incidents",
+                "1"
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Registro de incidentes oficiales importados de fuentes como PNP/INEI."
+    },
+    {
+      "name": "Predictions",
+      "item": [
+        {
+          "name": "Generate Prediction",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/predictions?zoneId=2&dayOfWeek=MONDAY&hour=22&score=0.75",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "predictions"
+              ],
+              "query": [
+                {
+                  "key": "zoneId",
+                  "value": "2"
+                },
+                {
+                  "key": "dayOfWeek",
+                  "value": "MONDAY"
+                },
+                {
+                  "key": "hour",
+                  "value": "22"
+                },
+                {
+                  "key": "score",
+                  "value": "0.75"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Prediction",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Predicciones de nivel de riesgo (LOW/MEDIUM/HIGH) calculadas por zona, día de la semana y hora."
+    },
+    {
+      "name": "Confirmations",
+      "item": [
+        {
+          "name": "Get Confirmations By Report",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Count Confirmations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": ""
+            }
+          },
+          "response": []
+        }
+      ],
+      "description": "Consulta de confirmaciones comunitarias asociadas a un reporte específico."
+    }
+  ]
+}
