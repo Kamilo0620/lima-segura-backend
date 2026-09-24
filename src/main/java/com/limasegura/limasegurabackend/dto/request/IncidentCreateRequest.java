@@ -18,7 +18,7 @@ public class IncidentCreateRequest {
     private Long categoryId;
 
     @NotBlank(message = "La fuente es obligatoria")
-    @Size(max = 50)
+    @Size(max = 50,message = "La fuente no puede superar los 50 caracteres")
     private String source;
     @NotNull(message = "La fecha del incidente es obligatoria")
     private LocalDate date;
