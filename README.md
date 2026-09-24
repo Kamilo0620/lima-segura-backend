@@ -165,16 +165,16 @@ Se construyó una API REST funcional con 7 entidades correctamente modeladas y r
 
 El desarrollo en equipo reveló la importancia de un flujo de control de versiones disciplinado: los cambios directos a `main` sin revisión previa generaron una pérdida real de funcionalidad ya construida, que solo se detectó gracias a pruebas exhaustivas antes de la entrega. Esto reforzó el valor de las Pull Requests y el testing manual constante durante el desarrollo, no solo al final.
 
-### Trabajo Futuro
 
-- Completar la capa de DTOs para evitar exponer las entidades (y datos sensibles como contraseñas hasheadas) directamente en las respuestas de la API.
-- Implementar la ingesta de datasets oficiales de PNP/INEI vía CSV/Excel, según lo recomendado por el equipo docente.
-- Calcular y almacenar conteos agregados de incidentes por Zona, Categoría y rango horario/fecha.
-- Desplegar la aplicación en AWS.
-- Ampliar la cobertura de pruebas automatizadas.
+## Variables de Entorno Requeridas
 
----
+| Variable | Descripción | Requerida |
+|---|---|---|
+| `JWT_SECRET` | Clave secreta para firmar los tokens JWT | No (tiene valor por defecto) |
+| `MAIL_USERNAME` | Correo Gmail usado para enviar notificaciones | No (la app arranca sin ella; el envío de correo simplemente no funcionará) |
+| `MAIL_PASSWORD` | Contraseña de aplicación de Gmail | No (mismo caso que `MAIL_USERNAME`) |
 
+Para probar el envío de correos, configura tu propia cuenta de Gmail con una [contraseña de aplicación](https://myaccount.google.com/apppasswords) y define ambas variables en tu entorno local o en la configuración de ejecución de tu IDE.
 ## Apéndices
 
 ### Licencia
