@@ -12,7 +12,7 @@ public class ZoneDetailResponse {
     private String district;
     private Double latitude;
     private Double longitude;
-    private int incidentsCount;
-    private int reportsCount;
-    private int predictionsCount;
+    private Integer incidentsCount;
+    private Integer reportsCount;
+    private Integer predictionsCount;
 }
