@@ -3,7 +3,6 @@ package com.limasegura.limasegurabackend.controller;
 import com.limasegura.limasegurabackend.dto.request.ReportCreateRequest;
 import com.limasegura.limasegurabackend.dto.response.ReportDetailResponse;
 import com.limasegura.limasegurabackend.dto.response.ReportResponse;
-import com.limasegura.limasegurabackend.model.Report;
 import com.limasegura.limasegurabackend.service.ReportService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
