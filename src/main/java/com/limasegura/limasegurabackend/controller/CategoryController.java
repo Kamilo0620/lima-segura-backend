@@ -1,6 +1,9 @@
 package com.limasegura.limasegurabackend.controller;
 
-import com.limasegura.limasegurabackend.model.Category;
+import com.limasegura.limasegurabackend.dto.request.CategoryCreateRequest;
+import com.limasegura.limasegurabackend.dto.request.CategoryUpdateRequest;
+import com.limasegura.limasegurabackend.dto.response.CategoryDetailResponse;
+import com.limasegura.limasegurabackend.dto.response.CategoryResponse;
 import com.limasegura.limasegurabackend.service.CategoryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,24 +21,25 @@ public class CategoryController {
     private final CategoryService categoryService;
 
     @PostMapping
-    public ResponseEntity<Category> create(@Valid @RequestBody Category category) {
-        Category created = categoryService.create(category);
+    public ResponseEntity<CategoryResponse> create(@Valid @RequestBody CategoryCreateRequest request) {
+        CategoryResponse created = categoryService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Category> getById(@PathVariable Long id) {
+    public ResponseEntity<CategoryDetailResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(categoryService.getById(id));
     }
 
     @GetMapping
-    public ResponseEntity<List<Category>> getAll() {
+    public ResponseEntity<List<CategoryResponse>> getAll() {
         return ResponseEntity.ok(categoryService.getAll());
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Category> update(@PathVariable Long id, @Valid @RequestBody Category category) {
-        return ResponseEntity.ok(categoryService.update(id, category));
+    public ResponseEntity<CategoryResponse> update(
+            @PathVariable Long id, @Valid @RequestBody CategoryUpdateRequest request) {
+        return ResponseEntity.ok(categoryService.update(id, request));
     }
 
     @DeleteMapping("/{id}")

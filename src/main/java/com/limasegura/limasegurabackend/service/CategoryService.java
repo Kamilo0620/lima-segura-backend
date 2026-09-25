@@ -1,10 +1,15 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.dto.request.CategoryCreateRequest;
+import com.limasegura.limasegurabackend.dto.request.CategoryUpdateRequest;
+import com.limasegura.limasegurabackend.dto.response.CategoryDetailResponse;
+import com.limasegura.limasegurabackend.dto.response.CategoryResponse;
 import com.limasegura.limasegurabackend.exception.DuplicateResourceException;
 import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Category;
 import com.limasegura.limasegurabackend.repository.CategoryRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -14,32 +19,43 @@ import java.util.List;
 public class CategoryService {
 
     private final CategoryRepository categoryRepository;
+    private final ModelMapper modelMapper;
 
-    public Category create(Category category) {
-        if (categoryRepository.existsByName(category.getName())) {
+    public CategoryResponse create(CategoryCreateRequest request) {
+        if (categoryRepository.existsByName(request.getName())) {
             throw new DuplicateResourceException("Ya existe una categoria con ese nombre");
         }
-        return categoryRepository.save(category);
+        Category category=modelMapper.map(request, Category.class);
+        Category savedCategory=categoryRepository.save(category);
+        return modelMapper.map(savedCategory, CategoryResponse.class);
     }
 
-    public Category getById(Long id) {
-        return categoryRepository.findById(id)
-                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + id));
+    public CategoryDetailResponse getById(Long id) {
+        Category category=categoryRepository.findById(id)
+                .orElseThrow(() -> new ResourceNotFoundException("Categoría no encontrada con id: " + id));
+        CategoryDetailResponse response=modelMapper.map(category,CategoryDetailResponse.class);
+        response.setReportsCount(categoryRepository.countByReportId());
+        response.setIncidentsCount(categoryRepository.countByIncidentId());
+        return response;
     }
 
-    public List<Category> getAll() {
-        return categoryRepository.findAll();
+    public List<CategoryResponse> getAll() {
+        return categoryRepository.findAll().stream()
+                .map(category->modelMapper.map(category,CategoryResponse.class)).toList();
     }
 
-    public Category update(Long id, Category category) {
-        Category existing = getById(id);
-        existing.setName(category.getName());
-        existing.setDescription(category.getDescription());
-        return categoryRepository.save(existing);
+    public CategoryResponse update(Long id, CategoryUpdateRequest request) {
+        Category existing = categoryRepository.findById(id)
+                        .orElseThrow(()->new ResourceNotFoundException("Categoría no encontrada con id: "+id));
+        existing.setName(request.getName());
+        existing.setDescription(request.getDescription());
+        Category updatedCategory=categoryRepository.save(existing);
+        return modelMapper.map(updatedCategory, CategoryResponse.class);
     }
 
     public void delete(Long id) {
-        Category existing = getById(id);
+        Category existing = categoryRepository.findById(id)
+                .orElseThrow(()->new ResourceNotFoundException("Categoría no encontrada con id: "+id));
         categoryRepository.delete(existing);
     }
 }
