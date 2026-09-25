@@ -66,6 +66,7 @@ Resolver este problema tiene un impacto directo en la seguridad y calidad de vid
 - **Predicciones de riesgo:** estructura para almacenar el nivel de riesgo calculado (`LOW`/`MEDIUM`/`HIGH`) por zona, día de la semana y hora.
 - **Notificaciones por correo:** al crear un reporte y al validarse por la comunidad, el usuario recibe un correo automático (procesado de forma asíncrona).
 - **Manejo centralizado de errores:** respuestas de error consistentes y predecibles en toda la API.
+- **Capa de DTOs completa:** 20 DTOs especializados (Create/Update/Response/DetailResponse) para los 7 recursos, con mapeo automático vía ModelMapper, garantizando que información sensible (como contraseñas hasheadas) nunca se exponga en las respuestas de la API.
 
 ### Tecnologías Utilizadas
 
@@ -75,6 +76,7 @@ Resolver este problema tiene un impacto directo en la seguridad y calidad de vid
 - **Persistencia:** Hibernate / JPA con Lombok para reducir código repetitivo
 - **Build:** Maven
 - **Control de versiones:** Git y GitHub, con Issues y Projects para gestión de tareas
+- **Mapeo de DTOs:** ModelMapper, para convertir automáticamente entre entidades JPA y DTOs de entrada/salida
 
 ---
 
