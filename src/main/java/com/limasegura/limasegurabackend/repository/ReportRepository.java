@@ -15,4 +15,6 @@ public interface ReportRepository extends JpaRepository<Report, Long> {
     List<Report> findByUserId(Long userId);
 
     List<Report> findByZoneIdAndStatus(Long zoneId, ReportStatus status);
+
+    Integer countByZoneId(Long id);
 }

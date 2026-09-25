@@ -15,4 +15,6 @@ public interface IncidentRepository extends JpaRepository<Incident, Long> {
     List<Incident> findBySource(String source);
 
     List<Incident> findByDateBetween(LocalDate from, LocalDate to);
+
+    Integer countByZoneId(Long id);
 }
