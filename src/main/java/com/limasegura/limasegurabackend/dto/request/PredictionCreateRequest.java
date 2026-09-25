@@ -3,9 +3,14 @@ package com.limasegura.limasegurabackend.dto.request;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.validation.constraints.*;
+import lombok.*;
 
 import java.time.DayOfWeek;
 
+@AllArgsConstructor
+@NoArgsConstructor
+@Setter @Getter
+@Builder
 public class PredictionCreateRequest {
     @NotNull(message = "El id de la zona es obligatorio")
     private Long zoneId;
