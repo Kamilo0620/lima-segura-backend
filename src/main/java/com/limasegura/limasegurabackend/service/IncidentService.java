@@ -1,5 +1,7 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.dto.request.IncidentCreateRequest;
+import com.limasegura.limasegurabackend.dto.response.IncidentResponse;
 import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.Category;
 import com.limasegura.limasegurabackend.model.Incident;
@@ -8,6 +10,7 @@ import com.limasegura.limasegurabackend.repository.CategoryRepository;
 import com.limasegura.limasegurabackend.repository.IncidentRepository;
 import com.limasegura.limasegurabackend.repository.ZoneRepository;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
@@ -18,45 +21,46 @@ import java.util.List;
 public class IncidentService {
 
     private final IncidentRepository incidentRepository;
+    private final ModelMapper modelMapper;
     private final ZoneRepository zoneRepository;
     private final CategoryRepository categoryRepository;
 
-    public Incident create(Long zoneId, Long categoryId, String source, LocalDate date, Double latitude, Double longitude) {
-        Zone zone = zoneRepository.findById(zoneId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
-        Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + categoryId));
+    public IncidentResponse create(IncidentCreateRequest request) {
+        Zone zone = zoneRepository.findById(request.getZoneId())
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: "+request.getZoneId()));
+        Category category = categoryRepository.findById(request.getCategoryId())
+                .orElseThrow(()->new ResourceNotFoundException("Categoria no encontrada con id: "+request.getCategoryId()));
 
-        Incident incident = new Incident();
-        incident.setZone(zone);
-        incident.setCategory(category);
-        incident.setSource(source);
-        incident.setDate(date);
-        incident.setLatitude(latitude);
-        incident.setLongitude(longitude);
-
-        return incidentRepository.save(incident);
+        Incident incident=modelMapper.map(request,Incident.class);
+        incident.setZone(zone); incident.setCategory(category);
+        Incident savedIncident=incidentRepository.save(incident);
+        return modelMapper.map(savedIncident, IncidentResponse.class);
     }
 
-    public Incident getById(Long id) {
-        return incidentRepository.findById(id)
+    public IncidentResponse getById(Long id) {
+        Incident incident=incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incidente no encontrado con id: " + id));
+        return modelMapper.map(incident, IncidentResponse.class);
     }
 
-    public List<Incident> getAll() {
-        return incidentRepository.findAll();
+    public List<IncidentResponse> getAll() {
+        return incidentRepository.findAll().stream()
+                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
     }
 
-    public List<Incident> getByZone(Long zoneId) {
-        return incidentRepository.findByZoneId(zoneId);
+    public List<IncidentResponse> getByZone(Long zoneId) {
+        return incidentRepository.findByZoneId(zoneId).stream()
+                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
     }
 
-    public List<Incident> getByDateRange(LocalDate from, LocalDate to) {
-        return incidentRepository.findByDateBetween(from, to);
+    public List<IncidentResponse> getByDateRange(LocalDate from, LocalDate to) {
+        return incidentRepository.findByDateBetween(from, to).stream()
+                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
     }
 
     public void delete(Long id) {
-        Incident existing = getById(id);
+        Incident existing = incidentRepository.findById(id)
+                        .orElseThrow(()->new ResourceNotFoundException("Incidente no encontrado con id: "+id));
         incidentRepository.delete(existing);
     }
 }
