@@ -1,5 +1,8 @@
 package com.limasegura.limasegurabackend.service;
 
+import com.limasegura.limasegurabackend.dto.request.ReportCreateRequest;
+import com.limasegura.limasegurabackend.dto.response.ReportDetailResponse;
+import com.limasegura.limasegurabackend.dto.response.ReportResponse;
 import com.limasegura.limasegurabackend.event.ReportCreatedEvent;
 import com.limasegura.limasegurabackend.event.ReportValidatedEvent;
 import com.limasegura.limasegurabackend.exception.InvalidOperationException;
@@ -7,6 +10,7 @@ import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.*;
 import lombok.RequiredArgsConstructor;
+import org.modelmapper.ModelMapper;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -18,55 +22,45 @@ public class ReportService {
 
     private static final int CONFIRMATIONS_TO_VALIDATE = 3;
 
+    private final ModelMapper modelMapper;
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
-    private final ZoneRepository zoneRepository;
-    private final CategoryRepository categoryRepository;
     private final ConfirmationRepository confirmationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public Report create(Long userId, Long zoneId, Long categoryId, String description, Double latitude, Double longitude) {
-        User user = userRepository.findById(userId)
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
-        Zone zone = zoneRepository.findById(zoneId)
-                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + zoneId));
-        Category category = categoryRepository.findById(categoryId)
-                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + categoryId));
-
-        Report report = new Report();
-        report.setUser(user);
-        report.setZone(zone);
-        report.setCategory(category);
-        report.setDescription(description);
-        report.setLatitude(latitude);
-        report.setLongitude(longitude);
-
-        Report savedReport = reportRepository.save(report);
+    public ReportResponse create(ReportCreateRequest req) {
+        Report report=modelMapper.map(req,Report.class);
+        Report savedReport=reportRepository.save(report);
 
         eventPublisher.publishEvent(new ReportCreatedEvent(savedReport));
 
-        return savedReport;
+        return modelMapper.map(savedReport, ReportResponse.class);
     }
 
-    public Report getById(Long id) {
-        return reportRepository.findById(id)
+    public ReportDetailResponse getById(Long id) {
+        Report report=reportRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado con id: " + id));
+        return modelMapper.map(report,ReportDetailResponse.class);
     }
 
-    public List<Report> getAll() {
-        return reportRepository.findAll();
+    public List<ReportResponse> getAll() {
+        return reportRepository.findAll().stream()
+                .map(report->modelMapper.map(report, ReportResponse.class)).toList();
     }
 
-    public List<Report> getByZone(Long zoneId) {
-        return reportRepository.findByZoneId(zoneId);
+    public List<ReportResponse> getByZone(Long zoneId) {
+        return reportRepository.findByZoneId(zoneId).stream()
+                .map(report->modelMapper.map(report,ReportResponse.class)).toList();
     }
 
-    public List<Report> getByUser(Long userId) {
-        return reportRepository.findByUserId(userId);
+    public List<ReportResponse> getByUser(Long userId) {
+        return reportRepository.findByUserId(userId).stream()
+                .map(report->modelMapper.map(report,ReportResponse.class)).toList();
     }
 
     public void confirm(Long reportId, Long userId) {
-        Report report = getById(reportId);
+        Report report=reportRepository.findById(reportId)
+                .orElseThrow(() -> new ResourceNotFoundException("Reporte no encontrado con id: " + reportId));
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
 
@@ -89,7 +83,8 @@ public class ReportService {
     }
 
     public void delete(Long id) {
-        Report existing = getById(id);
+        Report existing = reportRepository.findById(id)
+                        .orElseThrow(()->new ResourceNotFoundException("Reporte no encontrado con id :"+id));
         reportRepository.delete(existing);
     }
 }

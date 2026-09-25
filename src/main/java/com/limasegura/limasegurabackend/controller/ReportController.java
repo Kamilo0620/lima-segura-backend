@@ -1,5 +1,8 @@
 package com.limasegura.limasegurabackend.controller;
 
+import com.limasegura.limasegurabackend.dto.request.ReportCreateRequest;
+import com.limasegura.limasegurabackend.dto.response.ReportDetailResponse;
+import com.limasegura.limasegurabackend.dto.response.ReportResponse;
 import com.limasegura.limasegurabackend.model.Report;
 import com.limasegura.limasegurabackend.service.ReportService;
 import lombok.RequiredArgsConstructor;
@@ -17,24 +20,18 @@ public class ReportController {
     private final ReportService reportService;
 
     @PostMapping
-    public ResponseEntity<Report> create(
-            @RequestParam Long userId,
-            @RequestParam Long zoneId,
-            @RequestParam Long categoryId,
-            @RequestParam String description,
-            @RequestParam Double latitude,
-            @RequestParam Double longitude) {
-        Report created = reportService.create(userId, zoneId, categoryId, description, latitude, longitude);
+    public ResponseEntity<ReportResponse> create(ReportCreateRequest request) {
+        ReportResponse created = reportService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Report> getById(@PathVariable Long id) {
+    public ResponseEntity<ReportDetailResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(reportService.getById(id));
     }
 
     @GetMapping
-    public ResponseEntity<List<Report>> getAll(
+    public ResponseEntity<List<ReportResponse>> getAll(
             @RequestParam(required = false) Long zoneId,
             @RequestParam(required = false) Long userId) {
         if (zoneId != null) {
