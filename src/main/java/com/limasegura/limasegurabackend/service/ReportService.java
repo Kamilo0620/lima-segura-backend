@@ -14,6 +14,7 @@ import org.modelmapper.ModelMapper;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 
 @Service
@@ -25,15 +26,25 @@ public class ReportService {
     private final ModelMapper modelMapper;
     private final ReportRepository reportRepository;
     private final UserRepository userRepository;
+    private final ZoneRepository zoneRepository;
+    private final CategoryRepository categoryRepository;
     private final ConfirmationRepository confirmationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
     public ReportResponse create(ReportCreateRequest req) {
+        User user = userRepository.findById(req.getUserId())
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + req.getUserId()));
+        Zone zone = zoneRepository.findById(req.getZoneId())
+                .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + req.getZoneId()));
+        Category category = categoryRepository.findById(req.getCategoryId())
+                .orElseThrow(()->new ResourceNotFoundException("Categoria no encontrada con id: "+req.getCategoryId()));
+
         Report report=modelMapper.map(req,Report.class);
+        report.setUser(user);   report.setZone(zone);
+        report.setCategory(category);   report.setCreatedAt(LocalDateTime.now());
         Report savedReport=reportRepository.save(report);
 
         eventPublisher.publishEvent(new ReportCreatedEvent(savedReport));
-
         return modelMapper.map(savedReport, ReportResponse.class);
     }
 
