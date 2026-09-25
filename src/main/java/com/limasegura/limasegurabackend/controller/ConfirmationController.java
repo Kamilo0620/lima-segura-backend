@@ -1,6 +1,6 @@
 package com.limasegura.limasegurabackend.controller;
 
-import com.limasegura.limasegurabackend.model.Confirmation;
+import com.limasegura.limasegurabackend.dto.response.ConfirmationResponse;
 import com.limasegura.limasegurabackend.service.ConfirmationService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -17,7 +17,7 @@ public class ConfirmationController {
     private final ConfirmationService confirmationService;
 
     @GetMapping
-    public ResponseEntity<List<Confirmation>> getByReport(@RequestParam Long reportId) {
+    public ResponseEntity<List<ConfirmationResponse>> getByReport(@RequestParam Long reportId) {
         return ResponseEntity.ok(confirmationService.getByReport(reportId));
     }
 
