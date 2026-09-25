@@ -1,6 +1,9 @@
 package com.limasegura.limasegurabackend.controller;
 
-import com.limasegura.limasegurabackend.model.Zone;
+import com.limasegura.limasegurabackend.dto.request.ZoneCreateRequest;
+import com.limasegura.limasegurabackend.dto.request.ZoneUpdateRequest;
+import com.limasegura.limasegurabackend.dto.response.ZoneDetailResponse;
+import com.limasegura.limasegurabackend.dto.response.ZoneResponse;
 import com.limasegura.limasegurabackend.service.ZoneService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -18,18 +21,18 @@ public class ZoneController {
     private final ZoneService zoneService;
 
     @PostMapping
-    public ResponseEntity<Zone> create(@Valid @RequestBody Zone zone) {
-        Zone created = zoneService.create(zone);
+    public ResponseEntity<ZoneResponse> create(@Valid @RequestBody ZoneCreateRequest request) {
+        ZoneResponse created = zoneService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Zone> getById(@PathVariable Long id) {
+    public ResponseEntity<ZoneDetailResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(zoneService.getById(id));
     }
 
     @GetMapping
-    public ResponseEntity<List<Zone>> getAll(@RequestParam(required = false) String district) {
+    public ResponseEntity<List<ZoneResponse>> getAll(@RequestParam(required = false) String district) {
         if (district != null) {
             return ResponseEntity.ok(zoneService.getByDistrict(district));
         }
@@ -37,8 +40,8 @@ public class ZoneController {
     }
 
     @PutMapping("/{id}")
-    public ResponseEntity<Zone> update(@PathVariable Long id, @Valid @RequestBody Zone zone) {
-        return ResponseEntity.ok(zoneService.update(id, zone));
+    public ResponseEntity<ZoneResponse> update(@PathVariable Long id, @Valid @RequestBody ZoneUpdateRequest request) {
+        return ResponseEntity.ok(zoneService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
