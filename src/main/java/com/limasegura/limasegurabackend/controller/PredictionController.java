@@ -1,6 +1,7 @@
 package com.limasegura.limasegurabackend.controller;
 
-import com.limasegura.limasegurabackend.model.Prediction;
+import com.limasegura.limasegurabackend.dto.request.PredictionCreateRequest;
+import com.limasegura.limasegurabackend.dto.response.PredictionResponse;
 import com.limasegura.limasegurabackend.service.PredictionService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -17,17 +18,13 @@ public class PredictionController {
     private final PredictionService predictionService;
 
     @PostMapping
-    public ResponseEntity<Prediction> generate(
-            @RequestParam Long zoneId,
-            @RequestParam DayOfWeek dayOfWeek,
-            @RequestParam Integer hour,
-            @RequestParam Double score) {
-        Prediction created = predictionService.generate(zoneId, dayOfWeek, hour, score);
+    public ResponseEntity<PredictionResponse> generate(PredictionCreateRequest request) {
+        PredictionResponse created = predictionService.generate(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
     @GetMapping
-    public ResponseEntity<Prediction> getByZoneDayHour(
+    public ResponseEntity<PredictionResponse> getByZoneDayHour(
             @RequestParam Long zoneId,
             @RequestParam DayOfWeek dayOfWeek,
             @RequestParam Integer hour) {
