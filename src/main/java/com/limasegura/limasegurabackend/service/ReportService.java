@@ -37,12 +37,18 @@ public class ReportService {
         Zone zone = zoneRepository.findById(req.getZoneId())
                 .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + req.getZoneId()));
         Category category = categoryRepository.findById(req.getCategoryId())
-                .orElseThrow(()->new ResourceNotFoundException("Categoria no encontrada con id: "+req.getCategoryId()));
+                .orElseThrow(() -> new ResourceNotFoundException("Categoria no encontrada con id: " + req.getCategoryId()));
 
-        Report report=modelMapper.map(req,Report.class);
-        report.setUser(user);   report.setZone(zone);
-        report.setCategory(category);   report.setCreatedAt(LocalDateTime.now());
-        Report savedReport=reportRepository.save(report);
+        Report report = new Report();
+        report.setDescription(req.getDescription());
+        report.setLatitude(req.getLatitude());
+        report.setLongitude(req.getLongitude());
+        report.setUser(user);
+        report.setZone(zone);
+        report.setCategory(category);
+        report.setCreatedAt(LocalDateTime.now());
+
+        Report savedReport = reportRepository.save(report);
 
         eventPublisher.publishEvent(new ReportCreatedEvent(savedReport));
         return modelMapper.map(savedReport, ReportResponse.class);

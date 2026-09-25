@@ -4,6 +4,7 @@ import com.limasegura.limasegurabackend.dto.request.ReportCreateRequest;
 import com.limasegura.limasegurabackend.dto.response.ReportDetailResponse;
 import com.limasegura.limasegurabackend.dto.response.ReportResponse;
 import com.limasegura.limasegurabackend.service.ReportService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -19,7 +20,7 @@ public class ReportController {
     private final ReportService reportService;
 
     @PostMapping
-    public ResponseEntity<ReportResponse> create(ReportCreateRequest request) {
+    public ResponseEntity<ReportResponse> create(@Valid @RequestBody ReportCreateRequest request) {
         ReportResponse created = reportService.create(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
