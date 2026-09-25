@@ -1,5 +1,6 @@
 package com.limasegura.limasegurabackend.dto.request;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -21,6 +22,7 @@ public class IncidentCreateRequest {
     @Size(max = 50,message = "La fuente no puede superar los 50 caracteres")
     private String source;
     @NotNull(message = "La fecha del incidente es obligatoria")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     private LocalDate date;
     @NotNull(message = "La latitud es obligatoria")
     private Double latitude;
