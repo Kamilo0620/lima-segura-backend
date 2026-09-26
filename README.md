@@ -167,6 +167,14 @@ Se construyó una API REST funcional con 7 entidades correctamente modeladas y r
 
 El desarrollo en equipo reveló la importancia de un flujo de control de versiones disciplinado: los cambios directos a `main` sin revisión previa generaron una pérdida real de funcionalidad ya construida, que solo se detectó gracias a pruebas exhaustivas antes de la entrega. Esto reforzó el valor de las Pull Requests y el testing manual constante durante el desarrollo, no solo al final.
 
+## Trabajo Futuro
+- **Implementar refresh tokens** en el sistema de autenticación JWT, para permitir renovar la sesión sin requerir un nuevo login.
+- **Agregar un tercer caso de uso de eventos asíncronos** (por ejemplo, notificar la creación de un Incidente oficial), ampliando el sistema de eventos más allá de la creación y validación de reportes.
+- **Configurar un ThreadPoolTaskExecutor personalizado** para el procesamiento asíncrono, en vez de depender del executor por defecto de Spring.
+- **Incorporar plantillas HTML (Thymeleaf)** en los correos enviados por el sistema, en vez de texto plano.
+- **Implementar la ingesta de datasets oficiales de PNP/INEI vía CSV/Excel**, tal como lo recomendó el equipo docente.
+- **Calcular y almacenar conteos agregados de incidentes** por Zona, Categoría y rango horario/fecha.
+- **Ampliar la cobertura de pruebas automatizadas** (unitarias y de integración) para las capas de Service y Controller.
 
 ## Variables de Entorno Requeridas
 
