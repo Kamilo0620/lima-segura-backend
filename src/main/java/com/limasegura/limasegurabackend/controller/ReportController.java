@@ -14,6 +14,8 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import java.util.List;
+import com.limasegura.limasegurabackend.model.User;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 
 @RestController
 @RequestMapping("/api/v1/reports")
@@ -23,8 +25,9 @@ public class ReportController {
     private final ReportService reportService;
 
     @PostMapping
-    public ResponseEntity<ReportResponse> create(@Valid @RequestBody ReportCreateRequest request) {
-        ReportResponse created = reportService.create(request);
+    public ResponseEntity<ReportResponse> create(@Valid @RequestBody ReportCreateRequest request,
+                                                 @AuthenticationPrincipal User currentUser) {
+        ReportResponse created = reportService.create(request, currentUser.getId());
         return ResponseEntity.status(HttpStatus.CREATED).body(created);
     }
 
@@ -43,8 +46,9 @@ public class ReportController {
     }
 
     @PostMapping("/{id}/confirm")
-    public ResponseEntity<Void> confirm(@PathVariable Long id, @RequestParam Long userId) {
-        reportService.confirm(id, userId);
+    public ResponseEntity<Void> confirm(@PathVariable Long id,
+                                        @AuthenticationPrincipal User currentUser) {
+        reportService.confirm(id, currentUser.getId());
         return ResponseEntity.ok().build();
     }
 

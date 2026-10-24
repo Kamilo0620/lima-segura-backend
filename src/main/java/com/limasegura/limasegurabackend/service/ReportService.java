@@ -34,9 +34,9 @@ public class ReportService {
     private final ConfirmationRepository confirmationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public ReportResponse create(ReportCreateRequest req) {
-        User user = userRepository.findById(req.getUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + req.getUserId()));
+    public ReportResponse create(ReportCreateRequest req, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
         Zone zone = zoneRepository.findById(req.getZoneId())
                 .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + req.getZoneId()));
         Category category = categoryRepository.findById(req.getCategoryId())
