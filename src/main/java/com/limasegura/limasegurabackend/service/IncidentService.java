@@ -12,6 +12,9 @@ import com.limasegura.limasegurabackend.repository.ZoneRepository;
 import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.stereotype.Service;
+import com.limasegura.limasegurabackend.dto.response.PageResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -43,19 +46,16 @@ public class IncidentService {
         return modelMapper.map(incident, IncidentResponse.class);
     }
 
-    public List<IncidentResponse> getAll() {
-        return incidentRepository.findAll().stream()
-                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
-    }
-
-    public List<IncidentResponse> getByZone(Long zoneId) {
-        return incidentRepository.findByZoneId(zoneId).stream()
-                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
-    }
-
-    public List<IncidentResponse> getByDateRange(LocalDate from, LocalDate to) {
-        return incidentRepository.findByDateBetween(from, to).stream()
-                .map(incident->modelMapper.map(incident, IncidentResponse.class)).toList();
+    public PageResponse<IncidentResponse> getAll(Long zoneId, LocalDate from, LocalDate to, Pageable pageable) {
+        Page<Incident> page;
+        if (zoneId != null) {
+            page = incidentRepository.findByZoneId(zoneId, pageable);
+        } else if (from != null && to != null) {
+            page = incidentRepository.findByDateBetween(from, to, pageable);
+        } else {
+            page = incidentRepository.findAll(pageable);
+        }
+        return PageResponse.from(page.map(incident -> modelMapper.map(incident, IncidentResponse.class)));
     }
 
     public void delete(Long id) {

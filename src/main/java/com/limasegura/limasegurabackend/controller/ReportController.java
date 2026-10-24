@@ -9,7 +9,10 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.limasegura.limasegurabackend.dto.response.PageResponse;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import java.util.List;
 
 @RestController
@@ -31,16 +34,12 @@ public class ReportController {
     }
 
     @GetMapping
-    public ResponseEntity<List<ReportResponse>> getAll(
+    public ResponseEntity<PageResponse<ReportResponse>> getAll(
             @RequestParam(required = false) Long zoneId,
-            @RequestParam(required = false) Long userId) {
-        if (zoneId != null) {
-            return ResponseEntity.ok(reportService.getByZone(zoneId));
-        }
-        if (userId != null) {
-            return ResponseEntity.ok(reportService.getByUser(userId));
-        }
-        return ResponseEntity.ok(reportService.getAll());
+            @RequestParam(required = false) Long userId,
+            @RequestParam(required = false) String search,
+            @PageableDefault(size = 10, sort = "id", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(reportService.getAll(zoneId, userId, search, pageable));
     }
 
     @PostMapping("/{id}/confirm")
