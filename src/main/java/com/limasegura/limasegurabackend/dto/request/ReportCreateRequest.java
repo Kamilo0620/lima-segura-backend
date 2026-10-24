@@ -10,8 +10,6 @@ import lombok.*;
 @Setter @Getter
 @Builder
 public class ReportCreateRequest {
-    @NotNull(message="El ID del usuario es obligatorio")
-    private Long userId;
 
     @NotNull(message="El ID de la zona es obligatorio")
     private Long zoneId;

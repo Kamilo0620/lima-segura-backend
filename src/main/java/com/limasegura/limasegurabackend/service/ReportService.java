@@ -13,6 +13,9 @@ import lombok.RequiredArgsConstructor;
 import org.modelmapper.ModelMapper;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
+import com.limasegura.limasegurabackend.dto.response.PageResponse;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -31,9 +34,9 @@ public class ReportService {
     private final ConfirmationRepository confirmationRepository;
     private final ApplicationEventPublisher eventPublisher;
 
-    public ReportResponse create(ReportCreateRequest req) {
-        User user = userRepository.findById(req.getUserId())
-                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + req.getUserId()));
+    public ReportResponse create(ReportCreateRequest req, Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("Usuario no encontrado con id: " + userId));
         Zone zone = zoneRepository.findById(req.getZoneId())
                 .orElseThrow(() -> new ResourceNotFoundException("Zona no encontrada con id: " + req.getZoneId()));
         Category category = categoryRepository.findById(req.getCategoryId())
@@ -60,19 +63,18 @@ public class ReportService {
         return modelMapper.map(report,ReportDetailResponse.class);
     }
 
-    public List<ReportResponse> getAll() {
-        return reportRepository.findAll().stream()
-                .map(report->modelMapper.map(report, ReportResponse.class)).toList();
-    }
-
-    public List<ReportResponse> getByZone(Long zoneId) {
-        return reportRepository.findByZoneId(zoneId).stream()
-                .map(report->modelMapper.map(report,ReportResponse.class)).toList();
-    }
-
-    public List<ReportResponse> getByUser(Long userId) {
-        return reportRepository.findByUserId(userId).stream()
-                .map(report->modelMapper.map(report,ReportResponse.class)).toList();
+    public PageResponse<ReportResponse> getAll(Long zoneId, Long userId, String search, Pageable pageable) {
+        Page<Report> page;
+        if (zoneId != null) {
+            page = reportRepository.findByZoneId(zoneId, pageable);
+        } else if (userId != null) {
+            page = reportRepository.findByUserId(userId, pageable);
+        } else if (search != null && !search.isBlank()) {
+            page = reportRepository.findByDescriptionContainingIgnoreCase(search.trim(), pageable);
+        } else {
+            page = reportRepository.findAll(pageable);
+        }
+        return PageResponse.from(page.map(report -> modelMapper.map(report, ReportResponse.class)));
     }
 
     public void confirm(Long reportId, Long userId) {

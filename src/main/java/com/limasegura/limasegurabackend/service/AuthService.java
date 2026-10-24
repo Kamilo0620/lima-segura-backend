@@ -37,12 +37,9 @@ public class AuthService {
         user.setRole(Role.USER);
         user.setCreatedAt(LocalDateTime.now());
 
-        userRepository.save(user);
+        User savedUser = userRepository.save(user);
 
-        String jwtToken = jwtService.generateToken(user);
-        return AuthResponseDTO.builder()
-                .token(jwtToken)
-                .build();
+        return buildAuthResponse(savedUser);
     }
 
     public AuthResponseDTO login(LoginRequestDTO request) {
@@ -56,9 +53,17 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow();
 
+        return buildAuthResponse(user);
+    }
+
+    private AuthResponseDTO buildAuthResponse(User user) {
         String jwtToken = jwtService.generateToken(user);
         return AuthResponseDTO.builder()
                 .token(jwtToken)
+                .id(user.getId())
+                .name(user.getName())
+                .email(user.getEmail())
+                .role(user.getRole().name())
                 .build();
     }
 }

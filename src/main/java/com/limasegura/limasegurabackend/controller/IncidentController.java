@@ -8,7 +8,10 @@ import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
-
+import com.limasegura.limasegurabackend.dto.response.PageResponse;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.web.PageableDefault;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -31,17 +34,12 @@ public class IncidentController {
     }
 
     @GetMapping
-    public ResponseEntity<List<IncidentResponse>> getAll(
+    public ResponseEntity<PageResponse<IncidentResponse>> getAll(
             @RequestParam(required = false) Long zoneId,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to) {
-        if (zoneId != null) {
-            return ResponseEntity.ok(incidentService.getByZone(zoneId));
-        }
-        if (from != null && to != null) {
-            return ResponseEntity.ok(incidentService.getByDateRange(from, to));
-        }
-        return ResponseEntity.ok(incidentService.getAll());
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
+            @PageableDefault(size = 10, sort = "date", direction = Sort.Direction.DESC) Pageable pageable) {
+        return ResponseEntity.ok(incidentService.getAll(zoneId, from, to, pageable));
     }
 
     @DeleteMapping("/{id}")
