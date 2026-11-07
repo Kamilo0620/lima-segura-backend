@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Alerta de Ingesta - Lima Segura</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f8d7da; padding: 20px; }
+        .container { background-color: #ffffff; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto; }
+        .header { background-color: #dc3545; color: white; padding: 10px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { padding: 20px; color: #333; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h2>⚠️ Alerta del Pipeline de Ingesta</h2>
+    </div>
+    <div class="content">
+        <p>Hola <strong>Administrador</strong>,</p>
+        <p>Se ha detectado un problema con una de las fuentes de noticias configuradas.</p>
+        
+        <div style="background-color: #f1f1f1; padding: 15px; border-radius: 5px; margin-top: 15px;">
+            <p><strong>Fuente:</strong> <span th:text="${sourceName}">Nombre de la Fuente</span></p>
+            <p><strong>URL/ID:</strong> <span th:text="${sourceUrl}">URL</span></p>
+            <p><strong>Fallos Consecutivos:</strong> <span th:text="${failureCount}">5</span></p>
+            <p><strong>Último Error:</strong> <span th:text="${lastError}">Mensaje de error</span></p>
+        </div>
+        
+        <p style="margin-top:20px;">Por favor, revisa el panel de administración para corregir el problema de conexión o configuración.</p>
+    </div>
+    <div class="footer">
+        <p>&copy; 2026 Lima Segura - Sistema de Monitoreo</p>
+    </div>
+</div>
+</body>
+</html>

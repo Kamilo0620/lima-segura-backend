@@ -11,6 +11,4 @@ import java.util.Optional;
 public interface PredictionRepository extends JpaRepository<Prediction, Long> {
 
     Optional<Prediction> findByZoneIdAndDayOfWeekAndHour(Long zoneId, DayOfWeek dayOfWeek, Integer hour);
-
-    Integer countByZoneId(Long id);
 }

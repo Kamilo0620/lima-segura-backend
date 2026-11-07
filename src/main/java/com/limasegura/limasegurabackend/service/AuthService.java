@@ -34,11 +34,10 @@ public class AuthService {
         user.setName(request.getName());
         user.setEmail(request.getEmail());
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(Role.USER);
+        user.setRole(request.getRole() != null ? request.getRole() : Role.USER);
         user.setCreatedAt(LocalDateTime.now());
 
         User savedUser = userRepository.save(user);
-
         return buildAuthResponse(savedUser);
     }
 
@@ -63,7 +62,7 @@ public class AuthService {
                 .id(user.getId())
                 .name(user.getName())
                 .email(user.getEmail())
-                .role(user.getRole().name())
+                .role(user.getRole() != null ? user.getRole().name() : null)
                 .build();
     }
 }

@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Alerta en tu Zona - Lima Segura</title>
+    <style>
+        body { font-family: Arial, sans-serif; background-color: #f4f4f4; padding: 20px; }
+        .container { background-color: #ffffff; padding: 20px; border-radius: 8px; max-width: 600px; margin: auto; }
+        .header { background-color: #004085; color: white; padding: 10px; text-align: center; border-radius: 5px 5px 0 0; }
+        .content { padding: 20px; color: #333; }
+        .incident-card { border: 1px solid #ddd; padding: 15px; border-radius: 5px; margin-top: 15px; }
+        .footer { margin-top: 20px; font-size: 12px; color: #777; text-align: center; }
+        .type-badge { background-color: #dc3545; color: white; padding: 3px 8px; border-radius: 3px; font-size: 12px; font-weight: bold; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h2>Alerta de Seguridad</h2>
+    </div>
+    <div class="content">
+        <p>Hola <span th:text="${userName}">Usuario</span>,</p>
+        <p>Se ha registrado un nuevo incidente en la zona que estás monitoreando: <strong th:text="${zoneName}">Zona</strong>.</p>
+        
+        <div class="incident-card">
+            <h3 th:text="${incidentTitle}">Título del Incidente</h3>
+            <span class="type-badge" th:text="${incidentType}">TIPO</span>
+            <p><strong>Fecha/Hora:</strong> <span th:text="${occurredAt}">Fecha</span></p>
+            <p><strong>Ubicación:</strong> <span th:text="${address}">Dirección</span></p>
+            <p th:text="${summary}">Resumen del incidente...</p>
+        </div>
+        
+        <p style="margin-top:20px;">Mantente a salvo. Si notas alguna actividad sospechosa, comunícate con las autoridades (105).</p>
+    </div>
+    <div class="footer">
+        <p>&copy; 2026 Lima Segura. Este es un correo automático.</p>
+    </div>
+</div>
+</body>
+</html>

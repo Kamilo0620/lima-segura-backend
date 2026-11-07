@@ -1,52 +1,109 @@
 package com.limasegura.limasegurabackend.model;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
-import lombok.AllArgsConstructor;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
-import lombok.Setter;
+import lombok.*;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @Entity
-@Table(name = "incidentes")
+@Table(name = "incidents", indexes = {
+    @Index(name = "idx_incident_occurred_at", columnList = "occurred_at"),
+    @Index(name = "idx_incident_type_occurred", columnList = "incident_type, occurred_at"),
+    @Index(name = "idx_incident_district", columnList = "district_ubigeo")
+})
 @Getter
 @Setter
 @NoArgsConstructor
 @AllArgsConstructor
+@Builder
 public class Incident {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "zone_id", nullable = false)
-    @NotNull(message = "El incidente debe tener una zona")
-    private Zone zone;
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(name = "incident_type", nullable = false, length = 30)
+    private IncidentType incidentType;
+
+    @Size(max = 200)
+    @Column(length = 200)
+    private String title;
+
+    @Column(columnDefinition = "TEXT")
+    private String summary;
+
+    @Column(name = "occurred_at")
+    private LocalDateTime occurredAt;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "occurred_at_precision", length = 15)
+    @Builder.Default
+    private OccurredAtPrecision occurredAtPrecision = OccurredAtPrecision.UNKNOWN;
+
+    @Size(max = 500)
+    @Column(length = 500)
+    private String address;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
-    @NotNull(message = "El incidente debe tener una categoria")
-    private Category category;
+    @JoinColumn(name = "district_ubigeo")
+    private District district;
 
-    @NotBlank(message = "La fuente es obligatoria")
-    @Size(max = 50)
-    @Column(nullable = false, length = 50)
-    private String source;
+    @Column(name = "lat")
+    private Double lat;
 
-    @NotNull(message = "La fecha del incidente es obligatoria")
+    @Column(name = "lng")
+    private Double lng;
+
+    @Enumerated(EnumType.STRING)
+    @Column(name = "geo_precision", length = 15)
+    private GeoPrecision geoPrecision;
+
     @Column(nullable = false)
-    private LocalDate date;
+    @Builder.Default
+    private Double confidence = 0.0;
 
-    @NotNull(message = "La latitud es obligatoria")
-    @Column(nullable = false)
-    private Double latitude;
+    @Column(name = "incident_count", nullable = false)
+    @Builder.Default
+    private Integer incidentCount = 1;
 
-    @NotNull(message = "La longitud es obligatoria")
-    @Column(nullable = false)
-    private Double longitude;
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    @Builder.Default
+    private IncidentStatus status = IncidentStatus.PENDING_REVIEW;
+
+    @NotNull
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private IncidentOrigin origin;
+
+    @Size(max = 100)
+    @Column(name = "llm_model", length = 100)
+    private String llmModel;
+
+    @Column(name = "victims_count")
+    private Integer victimsCount;
+
+    @Size(max = 300)
+    @Column(name = "evidence_excerpt", length = 300)
+    private String evidenceExcerpt;
+
+    @Column(name = "created_at", nullable = false, updatable = false)
+    @Builder.Default
+    private LocalDateTime createdAt = LocalDateTime.now();
+
+    @ManyToMany
+    @JoinTable(
+        name = "incident_sources",
+        joinColumns = @JoinColumn(name = "incident_id"),
+        inverseJoinColumns = @JoinColumn(name = "source_item_id")
+    )
+    @Builder.Default
+    private Set<SourceItem> sourceItems = new HashSet<>();
 }
