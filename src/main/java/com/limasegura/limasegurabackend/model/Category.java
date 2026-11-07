@@ -32,12 +32,4 @@ public class Category {
     @Size(max = 255)
     @Column(length = 255)
     private String description;
-
-    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JsonIgnore
-    private List<Report> reports = new ArrayList<>();
-
-    @OneToMany(mappedBy = "category", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
-    @JsonIgnore
-    private List<Incident> incidents = new ArrayList<>();
 }
