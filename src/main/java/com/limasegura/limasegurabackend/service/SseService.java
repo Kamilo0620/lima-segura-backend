@@ -40,9 +40,10 @@ public class SseService {
     public void broadcast(Long incidentId) {
         for (SseEmitter emitter : emitters) {
             try {
+                // Mismo nombre de evento que escucha la web: "incident_published"
                 emitter.send(SseEmitter.event()
-                        .name("incident-published")
-                        .data(incidentId));
+                        .name("incident_published")
+                        .data(java.util.Map.of("incidentId", incidentId)));
             } catch (IOException e) {
                 log.warn("Failed to broadcast to emitter, removing it", e);
                 this.emitters.remove(emitter);
