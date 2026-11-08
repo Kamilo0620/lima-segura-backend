@@ -94,6 +94,10 @@ public class Incident {
     @Column(name = "evidence_excerpt", length = 300)
     private String evidenceExcerpt;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reporter_id")
+    private User reporter;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     @Builder.Default
     private LocalDateTime createdAt = LocalDateTime.now();

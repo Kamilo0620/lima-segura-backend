@@ -35,6 +35,9 @@ public class IncidentDetailResponse {
     private Integer victimsCount;
     private String evidenceExcerpt;
     private LocalDateTime createdAt;
+    private Long reporterId;
+    private long confirmationsCount;
+    private boolean confirmedByMe;
     private List<SourceReferenceDto> sources;
 
     @Data

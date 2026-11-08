@@ -33,6 +33,7 @@ public class SecurityConfig {
 
     private final JwtAuthenticationFilter jwtAuthFilter;
     private final UserDetailsService userDetailsService;
+    private final JwtAuthenticationEntryPoint jwtAuthenticationEntryPoint;
 
     @Value("${app.cors.allowed-origins:http://localhost:5173,http://localhost:8081}")
     private List<String> allowedOrigins;
@@ -52,7 +53,6 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.GET, "/api/v1/incidents/heatmap").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/incidents/stream").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/incidents/stats/dashboard").permitAll()
-                .requestMatchers(HttpMethod.POST, "/api/v1/incidents/report").permitAll()
                 .requestMatchers(HttpMethod.GET, "/api/v1/incidents/{id}").permitAll()
                 // Admin endpoints secured by @PreAuthorize
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
@@ -61,6 +61,7 @@ public class SecurityConfig {
                 // Everything else requires authentication
                 .anyRequest().authenticated()
             )
+            .exceptionHandling(ex -> ex.authenticationEntryPoint(jwtAuthenticationEntryPoint))
             .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
             .authenticationProvider(authenticationProvider())
             .addFilterBefore(jwtAuthFilter, UsernamePasswordAuthenticationFilter.class);

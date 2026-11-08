@@ -4,7 +4,16 @@ import com.limasegura.limasegurabackend.dto.incident.HeatmapPointResponse;
 import com.limasegura.limasegurabackend.dto.incident.IncidentDetailResponse;
 import com.limasegura.limasegurabackend.dto.incident.IncidentResponse;
 import com.limasegura.limasegurabackend.dto.incident.IncidentReviewRequest;
+import com.limasegura.limasegurabackend.dto.incident.ConfirmationResponse;
+import com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse;
+import com.limasegura.limasegurabackend.event.IncidentPublishedEvent;
+import com.limasegura.limasegurabackend.exception.DuplicateResourceException;
+import com.limasegura.limasegurabackend.exception.InvalidOperationException;
 import com.limasegura.limasegurabackend.exception.ResourceNotFoundException;
+import com.limasegura.limasegurabackend.model.Confirmation;
+import com.limasegura.limasegurabackend.model.District;
+import com.limasegura.limasegurabackend.model.User;
+import com.limasegura.limasegurabackend.repository.ConfirmationRepository;
 import com.limasegura.limasegurabackend.model.Incident;
 import com.limasegura.limasegurabackend.model.IncidentOrigin;
 import com.limasegura.limasegurabackend.model.IncidentStatus;
@@ -12,6 +21,7 @@ import com.limasegura.limasegurabackend.model.IncidentType;
 import com.limasegura.limasegurabackend.repository.IncidentRepository;
 import lombok.RequiredArgsConstructor;
 import jakarta.persistence.criteria.Predicate;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.domain.Specification;
@@ -22,6 +32,8 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
@@ -31,10 +43,21 @@ public class IncidentService {
     private final IncidentRepository incidentRepository;
     private final com.limasegura.limasegurabackend.repository.DistrictRepository districtRepository;
     private final SseService sseService;
+    private final ConfirmationRepository confirmationRepository;
+    private final ApplicationEventPublisher eventPublisher;
+
+    /** Confirmaciones necesarias para publicar un reporte ciudadano. */
+    public static final int CONFIRMATIONS_TO_PUBLISH = 3;
 
     public Page<IncidentResponse> findFiltered(IncidentType type, LocalDateTime from, LocalDateTime to,
                                               String district, IncidentStatus status, IncidentOrigin origin,
                                               Pageable pageable) {
+        return findFiltered(type, from, to, district, status, origin, null, pageable);
+    }
+
+    public Page<IncidentResponse> findFiltered(IncidentType type, LocalDateTime from, LocalDateTime to,
+                                              String district, IncidentStatus status, IncidentOrigin origin,
+                                              String search, Pageable pageable) {
         Specification<Incident> spec = (root, query, cb) -> {
             List<Predicate> predicates = new ArrayList<>();
             if (type != null) predicates.add(cb.equal(root.get("incidentType"), type));
@@ -48,6 +71,13 @@ public class IncidentService {
             }
             if (status != null) predicates.add(cb.equal(root.get("status"), status));
             if (origin != null) predicates.add(cb.equal(root.get("origin"), origin));
+            if (search != null && !search.isBlank()) {
+                String pattern = "%" + search.trim().toLowerCase() + "%";
+                predicates.add(cb.or(
+                    cb.like(cb.lower(root.get("title")), pattern),
+                    cb.like(cb.lower(root.get("address")), pattern)
+                ));
+            }
             return cb.and(predicates.toArray(new Predicate[0]));
         };
         Page<Incident> page = incidentRepository.findAll(spec, pageable);
@@ -55,6 +85,11 @@ public class IncidentService {
     }
 
     public IncidentDetailResponse getDetail(Long id) {
+        return getDetail(id, null);
+    }
+
+    @Transactional(readOnly = true)
+    public IncidentDetailResponse getDetail(Long id, User currentUser) {
         Incident incident = incidentRepository.findById(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident not found with id: " + id));
 
@@ -89,6 +124,10 @@ public class IncidentService {
                 .victimsCount(incident.getVictimsCount())
                 .evidenceExcerpt(incident.getEvidenceExcerpt())
                 .createdAt(incident.getCreatedAt())
+                .reporterId(incident.getReporter() != null ? incident.getReporter().getId() : null)
+                .confirmationsCount(confirmationRepository.countByIncidentId(incident.getId()))
+                .confirmedByMe(currentUser != null
+                        && confirmationRepository.existsByIncidentIdAndUserId(incident.getId(), currentUser.getId()))
                 .sources(sources)
                 .build();
     }
@@ -201,55 +240,100 @@ public class IncidentService {
         return mapToResponse(incidentRepository.save(incident));
     }
 
-    public com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse getDashboardStats() {
-        long total = incidentRepository.count();
+    /**
+     * Conteos agrupados reales (feedback del TA): por franja horaria, por tipo de delito y por distrito.
+     * Solo se cuentan incidentes publicados.
+     */
+    @Transactional(readOnly = true)
+    public DashboardStatsResponse getDashboardStats() {
+        List<Incident> published = incidentRepository.findAll().stream()
+                .filter(i -> i.getStatus() == IncidentStatus.PUBLISHED)
+                .toList();
+        long total = published.size();
 
-        // Hourly risk profile (24 hours) - calibrated according to criminal peak in Lima (12:00 - 22:00)
-        List<com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.HourlyRiskDto> hourlyRisk = new ArrayList<>();
-        int[] hourlyScores = {12, 10, 8, 6, 8, 14, 22, 35, 48, 56, 68, 74, 80, 85, 92, 88, 79, 72, 65, 54, 42, 34, 25, 18};
-        for (int i = 0; i < 24; i++) {
-            String hourStr = String.format("%02d:00", i);
-            hourlyRisk.add(com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.HourlyRiskDto.builder()
-                    .hour(hourStr)
-                    .score(hourlyScores[i])
+        // 1. Por hora del día (0..23)
+        long[] perHour = new long[24];
+        published.stream()
+                .map(Incident::getOccurredAt)
+                .filter(Objects::nonNull)
+                .forEach(t -> perHour[t.getHour()]++);
+        long maxHour = java.util.Arrays.stream(perHour).max().orElse(0);
+        List<DashboardStatsResponse.HourlyRiskDto> hourlyRisk = new ArrayList<>();
+        for (int h = 0; h < 24; h++) {
+            int score = maxHour == 0 ? 0 : (int) Math.round(perHour[h] * 100.0 / maxHour);
+            hourlyRisk.add(DashboardStatsResponse.HourlyRiskDto.builder()
+                    .hour(String.format("%02d:00", h))
+                    .score(score)
                     .build());
         }
 
-        // Category distribution matching the proposal / mockup
-        List<com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto> categoryDistribution = List.of(
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto.builder().category("Robo a transeúnte").type("ROBBERY").percentage(38).count(Math.max(1, (long)(total * 0.38))).color("#ef4444").build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto.builder().category("Robo de vehículo").type("VEHICLE_THEFT").percentage(22).count(Math.max(1, (long)(total * 0.22))).color("#f97316").build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto.builder().category("Hurto").type("THEFT").percentage(16).count(Math.max(1, (long)(total * 0.16))).color("#eab308").build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto.builder().category("Asalto con arma").type("ARMED_ROBBERY").percentage(14).count(Math.max(1, (long)(total * 0.14))).color("#a855f7").build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.CategoryStatDto.builder().category("Otros").type("OTHER").percentage(10).count(Math.max(1, (long)(total * 0.10))).color("#64748b").build()
-        );
+        // 2. Por tipo de delito
+        String[] palette = {"#ef4444", "#f97316", "#eab308", "#a855f7", "#3b82f6", "#64748b"};
+        Map<IncidentType, Long> perType = published.stream()
+                .collect(Collectors.groupingBy(Incident::getIncidentType, Collectors.counting()));
+        List<Map.Entry<IncidentType, Long>> sortedTypes = perType.entrySet().stream()
+                .sorted(Map.Entry.<IncidentType, Long>comparingByValue().reversed())
+                .toList();
+        List<DashboardStatsResponse.CategoryStatDto> categoryDistribution = new ArrayList<>();
+        for (int i = 0; i < sortedTypes.size(); i++) {
+            Map.Entry<IncidentType, Long> e = sortedTypes.get(i);
+            categoryDistribution.add(DashboardStatsResponse.CategoryStatDto.builder()
+                    .category(e.getKey().name())
+                    .type(e.getKey().name())
+                    .count(e.getValue())
+                    .percentage(total == 0 ? 0 : (int) Math.round(e.getValue() * 100.0 / total))
+                    .color(palette[Math.min(i, palette.length - 1)])
+                    .build());
+        }
 
-        // Danger zones matching the mockup
-        List<com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto> topZones = List.of(
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto.builder().rank(1).zone("Av. Alfonso Ugarte (Breña)").level("ALTO").score(78).build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto.builder().rank(2).zone("Jr. Zorritos (Cercado de Lima)").level("ALTO").score(74).build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto.builder().rank(3).zone("Av. Venezuela (Breña)").level("MEDIO").score(61).build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto.builder().rank(4).zone("Av. Tingo María (Cercado de Lima)").level("MEDIO").score(58).build(),
-            com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.DangerZoneDto.builder().rank(5).zone("Jr. Carhuaz (Breña)").level("BAJO").score(42).build()
-        );
+        // 3. Distritos con más incidentes (top 5)
+        Map<String, Long> perDistrict = published.stream()
+                .filter(i -> i.getDistrict() != null)
+                .collect(Collectors.groupingBy(i -> i.getDistrict().getName(), Collectors.counting()));
+        long maxDistrict = perDistrict.values().stream().mapToLong(Long::longValue).max().orElse(0);
+        List<Map.Entry<String, Long>> sortedDistricts = perDistrict.entrySet().stream()
+                .sorted(Map.Entry.<String, Long>comparingByValue().reversed())
+                .limit(5)
+                .toList();
+        List<DashboardStatsResponse.DangerZoneDto> topZones = new ArrayList<>();
+        for (int i = 0; i < sortedDistricts.size(); i++) {
+            Map.Entry<String, Long> e = sortedDistricts.get(i);
+            int score = (int) Math.round(e.getValue() * 100.0 / maxDistrict);
+            topZones.add(DashboardStatsResponse.DangerZoneDto.builder()
+                    .rank(i + 1)
+                    .zone(e.getKey())
+                    .score(score)
+                    .level(score >= 70 ? "ALTO" : score >= 40 ? "MEDIO" : "BAJO")
+                    .build());
+        }
 
-        return com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.builder()
+        // Zona más riesgosa = el distrito con más incidentes (dato real, no inventado)
+        DashboardStatsResponse.RiskLocationDto riskLocation = topZones.isEmpty() ? null
+                : DashboardStatsResponse.RiskLocationDto.builder()
+                        .score(topZones.get(0).getScore())
+                        .level(topZones.get(0).getLevel())
+                        .address(topZones.get(0).getZone())
+                        .radiusMeters(0)
+                        .trendPercent(null)
+                        .build();
+
+        return DashboardStatsResponse.builder()
                 .totalIncidents(total)
-                .riskLocation(com.limasegura.limasegurabackend.dto.incident.DashboardStatsResponse.RiskLocationDto.builder()
-                        .score(78)
-                        .level("ALTO")
-                        .address("Av. Alfonso Ugarte 1235, Breña")
-                        .radiusMeters(100)
-                        .trendPercent("+12%")
-                        .build())
+                .riskLocation(riskLocation)
                 .hourlyRisk(hourlyRisk)
                 .categoryDistribution(categoryDistribution)
                 .topDangerZones(topZones)
                 .build();
     }
 
+
+    /**
+     * Un ciudadano con sesión reporta un incidente. Nace en PENDING_REVIEW:
+     * aparece en la lista para que otros vecinos lo confirmen, pero no en el mapa de calor.
+     */
     @Transactional
-    public IncidentResponse createCitizenReport(com.limasegura.limasegurabackend.dto.incident.CitizenReportRequest request) {
+    public IncidentResponse createCitizenReport(com.limasegura.limasegurabackend.dto.incident.CitizenReportRequest request,
+                                                User reporter) {
         Incident incident = new Incident();
         incident.setIncidentType(request.getIncidentType());
         incident.setTitle(request.getTitle());
@@ -258,31 +342,68 @@ public class IncidentService {
         incident.setLat(request.getLat() != null ? request.getLat() : -12.0560);
         incident.setLng(request.getLng() != null ? request.getLng() : -77.0420);
         incident.setGeoPrecision(request.getLat() != null ? com.limasegura.limasegurabackend.model.GeoPrecision.EXACT_ADDRESS : com.limasegura.limasegurabackend.model.GeoPrecision.DISTRICT);
-        incident.setConfidence(0.85);
-        incident.setStatus(IncidentStatus.PUBLISHED);
+        incident.setConfidence(0.0);
+        incident.setStatus(IncidentStatus.PENDING_REVIEW);
         incident.setOrigin(IncidentOrigin.CITIZEN);
+        incident.setReporter(reporter);
         incident.setOccurredAt(request.getOccurredAt() != null ? request.getOccurredAt() : LocalDateTime.now());
-        incident.setOccurredAtPrecision(com.limasegura.limasegurabackend.model.OccurredAtPrecision.EXACT);
-        incident.setVictimsCount(1);
+        incident.setOccurredAtPrecision(request.getOccurredAt() != null
+                ? com.limasegura.limasegurabackend.model.OccurredAtPrecision.EXACT
+                : com.limasegura.limasegurabackend.model.OccurredAtPrecision.APPROXIMATE);
         incident.setIncidentCount(1);
         incident.setCreatedAt(LocalDateTime.now());
 
         if (request.getDistrictName() != null && !request.getDistrictName().isBlank()) {
-            List<com.limasegura.limasegurabackend.model.District> matches = districtRepository.findByNameIgnoreCase(request.getDistrictName().trim());
+            List<District> matches = districtRepository.findByNameIgnoreCase(request.getDistrictName().trim());
             if (!matches.isEmpty()) {
                 incident.setDistrict(matches.get(0));
             }
         }
 
-        Incident saved = incidentRepository.save(incident);
+        return mapToResponse(incidentRepository.save(incident));
+    }
 
-        try {
-            sseService.broadcastIncident(mapToResponse(saved));
-        } catch (Exception e) {
-            // ignore SSE fail
+    /**
+     * Un usuario confirma ("yo también lo vi") un reporte ciudadano.
+     * Al llegar a 3 confirmaciones el incidente se publica y se dispara un evento async.
+     */
+    @Transactional
+    public ConfirmationResponse confirm(Long incidentId, User user) {
+        Incident incident = incidentRepository.findById(incidentId)
+                .orElseThrow(() -> new ResourceNotFoundException("Incidente no encontrado con id: " + incidentId));
+
+        if (incident.getOrigin() != IncidentOrigin.CITIZEN) {
+            throw new InvalidOperationException("Solo se pueden confirmar reportes ciudadanos");
+        }
+        if (incident.getStatus() != IncidentStatus.PENDING_REVIEW) {
+            throw new InvalidOperationException("Este reporte ya no está pendiente de confirmación");
+        }
+        if (incident.getReporter() != null && incident.getReporter().getId().equals(user.getId())) {
+            throw new InvalidOperationException("No puedes confirmar tu propio reporte");
+        }
+        if (confirmationRepository.existsByIncidentIdAndUserId(incidentId, user.getId())) {
+            throw new DuplicateResourceException("Ya confirmaste este reporte");
         }
 
-        return mapToResponse(saved);
+        Confirmation confirmation = new Confirmation();
+        confirmation.setIncident(incident);
+        confirmation.setUser(user);
+        confirmationRepository.save(confirmation);
+
+        long total = confirmationRepository.countByIncidentId(incidentId);
+        if (total >= CONFIRMATIONS_TO_PUBLISH) {
+            incident.setStatus(IncidentStatus.PUBLISHED);
+            incident.setConfidence(1.0);
+            incidentRepository.save(incident);
+            eventPublisher.publishEvent(new IncidentPublishedEvent(this, incident.getId()));
+        }
+
+        return ConfirmationResponse.builder()
+                .incidentId(incidentId)
+                .confirmations(total)
+                .required(CONFIRMATIONS_TO_PUBLISH)
+                .status(incident.getStatus())
+                .build();
     }
 
     private IncidentResponse mapToResponse(Incident incident) {
@@ -306,6 +427,8 @@ public class IncidentService {
                 .origin(incident.getOrigin())
                 .victimsCount(incident.getVictimsCount())
                 .createdAt(incident.getCreatedAt())
+                .reporterId(incident.getReporter() != null ? incident.getReporter().getId() : null)
+                .confirmationsCount(confirmationRepository.countByIncidentId(incident.getId()))
                 .build();
     }
 }

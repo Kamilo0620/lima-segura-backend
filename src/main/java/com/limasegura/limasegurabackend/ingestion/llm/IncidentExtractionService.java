@@ -183,13 +183,14 @@ public class IncidentExtractionService {
         String cleanContent = contentText.replaceAll("\\s+", " ").trim();
         String summary = cleanContent.length() > 300 ? cleanContent.substring(0, 300) + "..." : cleanContent;
         incident.setSummary(summary);
-        incident.setConfidence(0.88);
+        // Sin LLM la extracción es poco confiable: confianza baja y requiere revisión de un admin
+        incident.setConfidence(0.3);
         incident.setLlmModel("nlp-heuristic-v1");
         incident.setEvidenceExcerpt(summary.length() > 200 ? summary.substring(0, 200) : summary);
         incident.setVictimsCount(1);
         incident.setIncidentCount(1);
         incident.setOccurredAt(item.getPublishedAt() != null ? item.getPublishedAt() : LocalDateTime.now());
-        incident.setOccurredAtPrecision(OccurredAtPrecision.EXACT);
+        incident.setOccurredAtPrecision(OccurredAtPrecision.APPROXIMATE);
 
         if (district != null) {
             incident.setDistrict(district);
@@ -200,9 +201,8 @@ public class IncidentExtractionService {
 
         // Deduplicate and save
         Incident saved = deduplicationService.deduplicateOrCreate(incident, item);
-        saved.setStatus(IncidentStatus.PUBLISHED);
-
-        eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
+        // No se publica automáticamente: un admin la revisa en el panel (PATCH /admin/incidents/{id})
+        saved.setStatus(IncidentStatus.PENDING_REVIEW);
 
         item.setStatus(SourceItemStatus.EXTRACTED);
         sourceItemRepository.save(item);
