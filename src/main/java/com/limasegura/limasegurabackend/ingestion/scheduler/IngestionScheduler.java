@@ -11,6 +11,7 @@ import com.limasegura.limasegurabackend.repository.SourceItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
@@ -30,9 +31,16 @@ public class IngestionScheduler {
     private final List<SourceConnector> connectors;
     private final ApplicationEventPublisher eventPublisher;
 
+    /** Ingesta automática apagada por defecto. Se activa con INGESTION_ENABLED=true. */
+    @Value("${ingestion.enabled:false}")
+    private boolean ingestionEnabled;
+
     @Scheduled(initialDelay = 5000, fixedDelayString = "${ingestion.poll-interval:PT5M}")
     @SchedulerLock(name = "ingestion", lockAtMostFor = "PT4M")
     public void runIngestion() {
+        if (!ingestionEnabled) {
+            return;
+        }
         log.info("Starting scheduled ingestion cycle");
         triggerAllSources();
     }

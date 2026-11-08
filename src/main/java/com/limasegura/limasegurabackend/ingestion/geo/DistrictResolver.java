@@ -18,7 +18,9 @@ public class DistrictResolver {
         String lower = text.toLowerCase();
         List<District> candidates = districtRepository.findAll();
         for (District d : candidates) {
-            if (lower.contains(d.getName().toLowerCase())) {
+            // Palabra completa: evita que "ate" coincida dentro de "debate" o "combate"
+            String name = java.util.regex.Pattern.quote(d.getName().toLowerCase());
+            if (java.util.regex.Pattern.compile("(?<![\\p{L}])" + name + "(?![\\p{L}])").matcher(lower).find()) {
                 return d;
             }
         }

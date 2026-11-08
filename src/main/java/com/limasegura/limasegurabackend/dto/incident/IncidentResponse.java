@@ -32,4 +32,6 @@ public class IncidentResponse {
     private IncidentOrigin origin;
     private Integer victimsCount;
     private LocalDateTime createdAt;
+    private Long reporterId;
+    private long confirmationsCount;
 }

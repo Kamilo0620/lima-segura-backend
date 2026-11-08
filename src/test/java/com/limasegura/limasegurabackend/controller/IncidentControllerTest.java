@@ -22,6 +22,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -103,7 +104,7 @@ class IncidentControllerTest {
                 .sources(List.of(source))
                 .build();
 
-        when(incidentService.getDetail(1L)).thenReturn(detail);
+        when(incidentService.getDetail(eq(1L), any())).thenReturn(detail);
 
         mockMvc.perform(get("/api/v1/incidents/1"))
                 .andExpect(status().isOk())

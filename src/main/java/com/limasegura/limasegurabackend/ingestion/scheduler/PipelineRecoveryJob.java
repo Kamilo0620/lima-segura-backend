@@ -8,6 +8,7 @@ import com.limasegura.limasegurabackend.model.SourceType;
 import com.limasegura.limasegurabackend.repository.SourceItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -23,9 +24,15 @@ public class PipelineRecoveryJob {
     private final ArticleFetcher articleFetcher;
     private final IncidentExtractionService extractionService;
 
+    @Value("${ingestion.enabled:false}")
+    private boolean ingestionEnabled;
+
     @Scheduled(fixedDelay = 120000)
     @org.springframework.transaction.annotation.Transactional
     public void recover() {
+        if (!ingestionEnabled) {
+            return;
+        }
         LocalDateTime now = LocalDateTime.now();
         List<SourceItemStatus> statuses = List.of(SourceItemStatus.DISCOVERED, SourceItemStatus.CONTENT_READY);
         

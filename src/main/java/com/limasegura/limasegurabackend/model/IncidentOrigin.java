@@ -7,5 +7,6 @@ public enum IncidentOrigin {
     OFFICIAL,
     OFFICIAL_PNP,
     OFFICIAL_INEI,
-    CITIZEN
+    CITIZEN,
+    SAMPLE
 }
