@@ -1,6 +1,8 @@
 package com.limasegura.limasegurabackend.controller;
 
-import com.limasegura.limasegurabackend.model.User;
+import com.limasegura.limasegurabackend.dto.auth.RegisterRequestDTO;
+import com.limasegura.limasegurabackend.dto.user.UserResponse;
+import com.limasegura.limasegurabackend.dto.user.UserUpdateRequest;
 import com.limasegura.limasegurabackend.service.UserService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -19,25 +21,29 @@ public class UserController {
     private final UserService userService;
 
     @PostMapping
-    public ResponseEntity<User> create(@Valid @RequestBody User user) {
-        User created = userService.create(user);
-        return ResponseEntity.status(HttpStatus.CREATED).body(created);
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<UserResponse> create(@Valid @RequestBody RegisterRequestDTO request) {
+        return ResponseEntity.status(HttpStatus.CREATED).body(userService.create(request));
     }
 
+    /** Cada usuario solo puede ver su propio perfil (el ADMIN puede ver cualquiera). */
     @GetMapping("/{id}")
-    public ResponseEntity<User> getById(@PathVariable Long id) {
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    public ResponseEntity<UserResponse> getById(@PathVariable Long id) {
         return ResponseEntity.ok(userService.getById(id));
     }
 
     @GetMapping
-    @PreAuthorize("hasRole('ADMIN') or hasRole('MANAGER')")
-    public ResponseEntity<List<User>> getAll() {
+    @PreAuthorize("hasRole('ADMIN')")
+    public ResponseEntity<List<UserResponse>> getAll() {
         return ResponseEntity.ok(userService.getAll());
     }
 
+    /** Cada usuario solo puede editar su propio perfil (el ADMIN puede editar cualquiera). */
     @PutMapping("/{id}")
-    public ResponseEntity<User> update(@PathVariable Long id, @Valid @RequestBody User user) {
-        return ResponseEntity.ok(userService.update(id, user));
+    @PreAuthorize("hasRole('ADMIN') or #id == authentication.principal.id")
+    public ResponseEntity<UserResponse> update(@PathVariable Long id, @Valid @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(userService.update(id, request));
     }
 
     @DeleteMapping("/{id}")
