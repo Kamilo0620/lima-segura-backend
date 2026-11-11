@@ -32,7 +32,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(Duration.ofSeconds(25));
+        // Gemini "piensa" antes de responder: con noticias largas puede tardar más de 25 s.
+        // Con 25 s se cancelaban llamadas válidas ("Request cancelled").
+        factory.setReadTimeout(Duration.ofSeconds(90));
         return RestClient.builder().requestFactory(factory).build();
     }
 

@@ -6,6 +6,7 @@ import com.limasegura.limasegurabackend.config.LlmConfig;
 import com.limasegura.limasegurabackend.dto.llm.LlmExtractionResponse;
 import com.limasegura.limasegurabackend.dto.llm.LlmIncidentDto;
 import com.limasegura.limasegurabackend.event.IncidentPublishedEvent;
+import com.limasegura.limasegurabackend.exception.LlmExtractionException;
 import com.limasegura.limasegurabackend.ingestion.dedup.IncidentDeduplicationService;
 import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
 import com.limasegura.limasegurabackend.ingestion.geo.DistrictResolver;
@@ -148,6 +149,23 @@ public class IncidentExtractionService {
             item.setStatus(publishedCount > 0 ? SourceItemStatus.EXTRACTED : SourceItemStatus.DISCARDED);
             sourceItemRepository.save(item);
 
+        } catch (LlmExtractionException e) {
+            // La IA no respondió (tiempo de espera, límite por minuto, caída). Es temporal:
+            // reintentamos más tarde en vez de mandar la noticia al plan B sin IA.
+            int nextAttempt = (item.getAttempts() != null ? item.getAttempts() : 0) + 1;
+            if (nextAttempt < ingestionConfig.getMaxAttempts()) {
+                item.setAttempts(nextAttempt);
+                item.setNextAttemptAt(LocalDateTime.now().plusMinutes(5L * nextAttempt));
+                String msg = e.getMessage() != null ? e.getMessage() : "LLM error";
+                item.setError("IA no disponible (intento " + nextAttempt + "): " + msg.substring(0, Math.min(msg.length(), 300)));
+                sourceItemRepository.save(item);
+                log.warn("LLM unavailable for item {} (attempt {}/{}), will retry in {} min: {}",
+                        sourceItemId, nextAttempt, ingestionConfig.getMaxAttempts(), 5 * nextAttempt, msg);
+                return;
+            }
+            log.warn("LLM failed {} times for item {}, using keyword fallback (result stays PENDING_REVIEW): {}",
+                    nextAttempt, sourceItemId, e.getMessage());
+            extractVerifiedCrimeOnQuotaLimit(item, contentText);
         } catch (Exception e) {
             log.warn("LLM failed for item {} ({}), using keyword fallback (result stays PENDING_REVIEW): {}",
                     sourceItemId, e.getClass().getSimpleName(), e.getMessage());
