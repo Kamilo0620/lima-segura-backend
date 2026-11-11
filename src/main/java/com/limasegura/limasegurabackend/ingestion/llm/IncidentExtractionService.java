@@ -344,6 +344,13 @@ public class IncidentExtractionService {
     }
 
     private boolean isOutsideLimaAndCallao(LlmIncidentDto dto) {
+        // Si la IA indica un departamento o provincia distinto de Lima/Callao, está fuera
+        if (dto.getLocation() != null) {
+            if (isKnownAndNotLimaCallao(dto.getLocation().getDepartment())
+                    || isKnownAndNotLimaCallao(dto.getLocation().getProvince())) {
+                return true;
+            }
+        }
         StringBuilder sb = new StringBuilder();
         if (dto.getLocation() != null) {
             if (dto.getLocation().getDepartment() != null) sb.append(dto.getLocation().getDepartment()).append(" ");
@@ -356,6 +363,13 @@ public class IncidentExtractionService {
                 dto.getTitle() != null ? dto.getTitle() : sb.toString(),
                 sb.toString(),
                 "");
+    }
+
+    private boolean isKnownAndNotLimaCallao(String place) {
+        if (place == null || place.isBlank()) return false;
+        String norm = Normalizer.normalize(place.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").trim();
+        return !(norm.contains("lima") || norm.contains("callao"));
     }
 
     private String cleanJsonResponse(String response) {

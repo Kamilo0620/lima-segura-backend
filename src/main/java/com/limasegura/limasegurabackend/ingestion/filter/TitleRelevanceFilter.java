@@ -12,6 +12,7 @@ import java.util.Locale;
  * que representen un riesgo real para las personas en Lima Metropolitana y el Callao
  * (robos, asaltos, sicariato, homicidios, balaceras, feminicidios, extorsiones, secuestros, agresiones).
  */
+
 @Component
 public class TitleRelevanceFilter {
 
@@ -54,7 +55,7 @@ public class TitleRelevanceFilter {
             "condenan a", "sentencian a", "prision preventiva", "cadena perpetua", "anos de carcel", "anos de prision",
             "fue detenido 18 anos despues", "18 anos despues", "extraditan", "extradicion",
             "pistas clandestinas", "sucamec", "plan operativo interinstitucional", "salud mental",
-            "incendio en", "tras un incendio", "ahogarse", "a punto de ahogarse", "choque de su moto", "accidente de transito",
+            "ahogarse", "a punto de ahogarse", "choque de su moto", "accidente de transito",
             "carlos ascues", "estado de ebriedad", "pasarse luz roja", "cobro coima", "recibir s/3.000", "no multar a chofer",
             "convocan a movilizacion", "propuestas urgentes", "que hacer contra el crimen",
             "cristiano ronaldo", "messi", "lapadula", "torneo clausura", "liga 1", "play-offs", "sporting cristal",
@@ -75,14 +76,17 @@ public class TitleRelevanceFilter {
         }
 
         String normTitle = normalize(title);
-        String normContent = content != null ? normalize(content) : "";
         String normUrl = url != null ? normalize(url) : "";
-        String combinedTitleUrl = normTitle + " " + normUrl;
-        String fullText = combinedTitleUrl + " " + normContent;
+        // Las exclusiones se buscan SOLO en el título y la URL, y como PALABRAS COMPLETAS.
+        // Antes se buscaban como pedazos de texto en todo el artículo: "ica" (la ciudad) coincidía con
+        // "larepublica.pe" o "pública", y se descartaban delitos reales de Lima.
+        // El cuerpo de la noticia suele mencionar otros lugares de pasada; la ubicación real la decide
+        // después la IA y la validación de distrito de Lima/Callao.
+        String fullText = normTitle + " " + normUrl;
 
-        // 1. Descartar inmediatamente cualquier noticia internacional, de provincias, lavado de activos, accidentes o notas institucionales
+        // 1. Descartar cualquier noticia internacional, de provincias, lavado de activos, accidentes o notas institucionales
         for (String excluded : STRICT_EXCLUSIONS) {
-            if (fullText.contains(excluded)) {
+            if (containsTerm(fullText, excluded)) {
                 // Excepción si es el nombre de una avenida de Lima (ej. "Av. Venezuela", "Av. Argentina", "Av. Arequipa", "Av. Brasil", "Av. México", "Av. Tacna", "Av. Canadá")
                 if (isLimaAvenueMention(fullText, excluded)) {
                     continue;
@@ -99,6 +103,23 @@ public class TitleRelevanceFilter {
         }
 
         return false;
+    }
+
+    /** Coincidencia por palabra completa (las rutas tipo "/mundo/" se buscan tal cual). */
+    private static boolean containsTerm(String text, String term) {
+        if (term.startsWith("/") || term.startsWith("(")) {
+            return text.contains(term);
+        }
+        int from = 0;
+        while (true) {
+            int idx = text.indexOf(term, from);
+            if (idx < 0) return false;
+            int end = idx + term.length();
+            boolean leftOk = idx == 0 || !Character.isLetterOrDigit(text.charAt(idx - 1));
+            boolean rightOk = end >= text.length() || !Character.isLetterOrDigit(text.charAt(end));
+            if (leftOk && rightOk) return true;
+            from = idx + 1;
+        }
     }
 
     private boolean isLimaAvenueMention(String normText, String term) {
