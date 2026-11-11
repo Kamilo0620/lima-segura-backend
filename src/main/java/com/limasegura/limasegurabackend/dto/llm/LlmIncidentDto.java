@@ -30,5 +30,7 @@ public class LlmIncidentDto {
         private String district;
         private String province;
         private String department;
+        private Double approx_lat;
+        private Double approx_lng;
     }
 }

@@ -11,11 +11,14 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface SourceItemRepository extends JpaRepository<SourceItem, Long> {
 
     boolean existsByNewsSourceIdAndExternalId(Long newsSourceId, String externalId);
+
+    Optional<SourceItem> findByNewsSourceIdAndExternalId(Long newsSourceId, String externalId);
 
     Page<SourceItem> findByStatus(SourceItemStatus status, Pageable pageable);
 

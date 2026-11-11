@@ -5,6 +5,8 @@ import com.limasegura.limasegurabackend.model.IncidentStatus;
 import com.limasegura.limasegurabackend.model.IncidentType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.domain.Specification;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.JpaSpecificationExecutor;
 import org.springframework.data.jpa.repository.Query;
@@ -13,9 +15,25 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSpecificationExecutor<Incident> {
+
+    @Override
+    @EntityGraph(attributePaths = {"district"})
+    Page<Incident> findAll(Specification<Incident> spec, Pageable pageable);
+
+    @Override
+    @EntityGraph(attributePaths = {"district", "sourceItems", "sourceItems.newsSource"})
+    List<Incident> findAll(Specification<Incident> spec);
+
+    @Query("SELECT i FROM Incident i " +
+           "LEFT JOIN FETCH i.district " +
+           "LEFT JOIN FETCH i.sourceItems si " +
+           "LEFT JOIN FETCH si.newsSource " +
+           "WHERE i.id = :id")
+    Optional<Incident> findByIdWithDetails(@Param("id") Long id);
 
     Page<Incident> findByStatus(IncidentStatus status, Pageable pageable);
 
