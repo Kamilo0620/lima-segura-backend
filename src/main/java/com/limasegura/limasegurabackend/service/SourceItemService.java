@@ -1,10 +1,12 @@
 package com.limasegura.limasegurabackend.service;
 
 import com.limasegura.limasegurabackend.dto.ingestion.SourceItemResponse;
+import com.limasegura.limasegurabackend.event.SourceItemDiscoveredEvent;
 import com.limasegura.limasegurabackend.model.SourceItem;
 import com.limasegura.limasegurabackend.model.SourceItemStatus;
 import com.limasegura.limasegurabackend.repository.SourceItemRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -14,6 +16,7 @@ import org.springframework.stereotype.Service;
 public class SourceItemService {
 
     private final SourceItemRepository sourceItemRepository;
+    private final ApplicationEventPublisher eventPublisher;
 
     public Page<SourceItemResponse> findAll(SourceItemStatus status, Pageable pageable) {
         Page<SourceItem> page;
@@ -30,7 +33,9 @@ public class SourceItemService {
                 .orElseThrow(() -> new RuntimeException("SourceItem not found"));
         item.setStatus(SourceItemStatus.DISCOVERED);
         item.setAttempts(0);
-        sourceItemRepository.save(item);
+        item.setError(null);
+        SourceItem saved = sourceItemRepository.save(item);
+        eventPublisher.publishEvent(new SourceItemDiscoveredEvent(this, saved.getId()));
     }
 
     private SourceItemResponse mapToResponse(SourceItem item) {

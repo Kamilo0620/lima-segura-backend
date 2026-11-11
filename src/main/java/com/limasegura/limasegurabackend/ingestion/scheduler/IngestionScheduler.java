@@ -4,6 +4,7 @@ import com.limasegura.limasegurabackend.event.IngestionFailedEvent;
 import com.limasegura.limasegurabackend.event.SourceItemDiscoveredEvent;
 import com.limasegura.limasegurabackend.ingestion.connector.DiscoveredItem;
 import com.limasegura.limasegurabackend.ingestion.connector.SourceConnector;
+import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.IngestionRunRepository;
 import com.limasegura.limasegurabackend.repository.NewsSourceRepository;
@@ -30,6 +31,7 @@ public class IngestionScheduler {
     private final IngestionRunRepository ingestionRunRepository;
     private final List<SourceConnector> connectors;
     private final ApplicationEventPublisher eventPublisher;
+    private final TitleRelevanceFilter titleRelevanceFilter = new TitleRelevanceFilter();
 
     /** Ingesta automática apagada por defecto. Se activa con INGESTION_ENABLED=true. */
     @Value("${ingestion.enabled:false}")
@@ -81,9 +83,16 @@ public class IngestionScheduler {
             int itemsNew = 0;
 
             for (DiscoveredItem dItem : discoveredItems) {
-                if (!sourceItemRepository.existsByNewsSourceIdAndExternalId(
-                        source.getId(), dItem.getExternalId())) {
+                // FILTRO PREVIO DE TÍTULO: Evaluar si el título trata sobre un hecho delictivo/policial antes de guardar
+                if (!titleRelevanceFilter.isRelevantCrimeTitle(dItem.getTitle(), dItem.getUrl())) {
+                    log.debug("Discarded non-crime item by title filter: {}", dItem.getTitle());
+                    continue;
+                }
 
+                java.util.Optional<SourceItem> existingOpt = sourceItemRepository.findByNewsSourceIdAndExternalId(
+                        source.getId(), dItem.getExternalId());
+
+                if (existingOpt.isEmpty()) {
                     SourceItem item = SourceItem.builder()
                             .newsSource(source)
                             .externalId(dItem.getExternalId())
@@ -100,6 +109,21 @@ public class IngestionScheduler {
                     itemsNew++;
 
                     eventPublisher.publishEvent(new SourceItemDiscoveredEvent(this, item.getId()));
+                } else {
+                    SourceItem existing = existingOpt.get();
+                    if (existing.getStatus() == SourceItemStatus.FAILED
+                            || existing.getStatus() == SourceItemStatus.DISCOVERED
+                            || existing.getStatus() == SourceItemStatus.CONTENT_READY) {
+                        existing.setStatus(SourceItemStatus.DISCOVERED);
+                        existing.setAttempts(0);
+                        existing.setError(null);
+                        if (dItem.getPublishedAt() != null) {
+                            existing.setPublishedAt(dItem.getPublishedAt());
+                        }
+                        sourceItemRepository.save(existing);
+                        itemsNew++;
+                        eventPublisher.publishEvent(new SourceItemDiscoveredEvent(this, existing.getId()));
+                    }
                 }
             }
 
@@ -112,7 +136,7 @@ public class IngestionScheduler {
             source.setConsecutiveFailures(0);
             source.setLastError(null);
 
-            log.info("Ingestion for source '{}': found={}, new={}", source.getName(), itemsFound, itemsNew);
+            log.info("Ingestion for source '{}': found={}, new (crime-filtered)={}", source.getName(), itemsFound, itemsNew);
 
         } catch (Exception e) {
             log.error("Ingestion failed for source '{}': {}", source.getName(), e.getMessage());

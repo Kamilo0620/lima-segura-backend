@@ -90,7 +90,7 @@ public class IncidentService {
 
     @Transactional(readOnly = true)
     public IncidentDetailResponse getDetail(Long id, User currentUser) {
-        Incident incident = incidentRepository.findById(id)
+        Incident incident = incidentRepository.findByIdWithDetails(id)
                 .orElseThrow(() -> new ResourceNotFoundException("Incident not found with id: " + id));
 
         List<IncidentDetailResponse.SourceReferenceDto> sources = incident.getSourceItems().stream()
@@ -428,7 +428,7 @@ public class IncidentService {
                 .victimsCount(incident.getVictimsCount())
                 .createdAt(incident.getCreatedAt())
                 .reporterId(incident.getReporter() != null ? incident.getReporter().getId() : null)
-                .confirmationsCount(confirmationRepository.countByIncidentId(incident.getId()))
+                .confirmationsCount(incident.getOrigin() == IncidentOrigin.CITIZEN ? confirmationRepository.countByIncidentId(incident.getId()) : 0L)
                 .build();
     }
 }

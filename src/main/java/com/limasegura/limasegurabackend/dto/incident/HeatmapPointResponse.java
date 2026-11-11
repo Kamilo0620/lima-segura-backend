@@ -5,6 +5,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.LocalDateTime;
+
 @Data
 @Builder
 @NoArgsConstructor
@@ -20,4 +22,7 @@ public class HeatmapPointResponse {
     private Long incidentId;
     private String incidentType;
     private String title;
+    private String districtName;
+    private String province;
+    private LocalDateTime occurredAt;
 }

@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.limasegura.limasegurabackend.event.SourceItemContentReadyEvent;
 import com.limasegura.limasegurabackend.exception.SourceFetchException;
+import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
 import com.limasegura.limasegurabackend.model.NewsSource;
 import com.limasegura.limasegurabackend.model.SourceItem;
 import com.limasegura.limasegurabackend.model.SourceItemStatus;
@@ -27,19 +28,43 @@ public class ArticleFetcher {
     private final SourceItemRepository sourceItemRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final ObjectMapper objectMapper;
+    private final TitleRelevanceFilter titleRelevanceFilter = new TitleRelevanceFilter();
 
     @Transactional
     public void fetchContent(Long sourceItemId) {
         SourceItem item = sourceItemRepository.findById(sourceItemId)
                 .orElseThrow(() -> new SourceFetchException("SourceItem not found: " + sourceItemId));
 
+        // 0. FILTRO PREVIO DE TÍTULO: Evaluar el título ANTES de descargar o procesar el contenido
+        if (!titleRelevanceFilter.isRelevantCrimeTitle(item.getTitle(), item.getUrl())) {
+            item.setStatus(SourceItemStatus.DISCARDED);
+            sourceItemRepository.save(item);
+            log.info("Discarded source item {} before fetching content (non-crime title: '{}')", sourceItemId, item.getTitle());
+            return;
+        }
+
         NewsSource source = item.getNewsSource();
 
-        // 1. YouTube se procesa directamente a partir de sus títulos y descripciones informativas
+        // 1. YouTube se procesa a partir de su título + descripción enriquecida del video
         if (source.getType() == SourceType.YOUTUBE_CHANNEL) {
-            log.info("Processing YouTube item {} directly from title and metadata: {}", sourceItemId, item.getTitle());
-            String videoText = (item.getTitle() != null ? item.getTitle() : "") + "\n\n" + (item.getContentText() != null ? item.getContentText() : "");
-            item.setContentText(videoText);
+            log.info("Processing YouTube item {} from title and video description: {}", sourceItemId, item.getTitle());
+            String extraDescription = item.getContentText() != null ? item.getContentText() : "";
+            if (extraDescription.length() < 160 && item.getUrl() != null && item.getUrl().startsWith("http")) {
+                try {
+                    Document ytDoc = Jsoup.connect(item.getUrl())
+                            .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/124.0.0.0 Safari/537.36")
+                            .header("Accept-Language", "es-PE,es;q=0.9")
+                            .cookie("CONSENT", "YES+cb.20210328-17-p0.es+FX+999")
+                            .timeout(8000)
+                            .get();
+                    String metaDesc = ytDoc.select("meta[name='description'], meta[property='og:description']").attr("content");
+                    if (metaDesc != null && !metaDesc.isBlank()) {
+                        extraDescription = extraDescription + "\n" + metaDesc;
+                    }
+                } catch (Exception ignored) {}
+            }
+            String videoText = (item.getTitle() != null ? item.getTitle() : "") + "\n\n" + extraDescription;
+            item.setContentText(videoText.trim());
             item.setStatus(SourceItemStatus.CONTENT_READY);
             sourceItemRepository.save(item);
             eventPublisher.publishEvent(new SourceItemContentReadyEvent(this, sourceItemId));
@@ -75,7 +100,6 @@ public class ArticleFetcher {
                 String titleSelector = "h1";
                 String bodySelector = "article";
 
-                // Verificar si hay selectores específicos en la configuración de la fuente
                 if (source.getConfig() != null && !source.getConfig().isBlank()) {
                     try {
                         JsonNode configNode = objectMapper.readTree(source.getConfig());
@@ -129,7 +153,6 @@ public class ArticleFetcher {
             log.warn("Web fetch failed for item {} ({}), falling back to RSS summary/title: {}",
                     sourceItemId, item.getUrl(), e.getMessage());
 
-            // Si falla la petición web, nos aseguramos de que el contenido no se pierda si tenemos datos RSS
             if (initialRssText != null && !initialRssText.isBlank()) {
                 item.setContentText(item.getTitle() + "\n\n" + initialRssText);
                 item.setStatus(SourceItemStatus.CONTENT_READY);
@@ -188,28 +211,23 @@ public class ArticleFetcher {
     }
 
     void cleanPaywallAndCookieElements(Document doc) {
-        // Eliminar elementos no informativos
         doc.select("script, style, noscript, iframe, svg, nav, footer, header, aside").remove();
 
-        // Eliminar banners de cookies y CMPs (Didomi, OneTrust, etc.)
         doc.select("[id*='cookie'], [class*='cookie'], [id*='consent'], [class*='consent'], " +
                    "#didomi-notice, .cmp-container, #onetrust-consent-sdk, .banner-cookies, " +
                    "[class*='cookie-banner'], [class*='cookies-policy'], [id*='cookies-box']").remove();
 
-        // Eliminar banners de suscripción, paywalls y modales
         doc.select("[class*='paywall'], [id*='paywall'], [class*='suscrib'], [id*='suscrib'], " +
                    "[class*='subscription'], [id*='subscription'], [class*='muro'], [id*='muro'], " +
                    ".tp-modal, .tp-backdrop, [class*='premium-banner'], [class*='registro-banner'], " +
                    ".paywall-content, #piano-root, .muro-registro, .modal-paywall, [class*='modal-backdrop']").remove();
 
-        // Eliminar anuncios y widgets de redes
         doc.select("[class*='ad-'], [id*='ad-'], [class*='advertisement'], .publicidad, " +
                    ".banner-ad, [class*='social-share'], [class*='comentarios'], [id*='comments']").remove();
     }
 
     public static String sanitizeText(String text) {
         if (text == null) return "";
-        // Eliminar frases comunes de paywalls y cookies
         String cleaned = text.replaceAll("(?i)(suscr[ií]bete a nuestro bolet[ií]n|suscr[ií]bete ahora por|para seguir leyendo.*suscr[ií]bete|contenido exclusivo para suscriptores|inicia sesi[oó]n para continuar|acepta todas las cookies|usamos cookies para mejorar tu experiencia|todos los derechos reservados|descarga nuestra app|noticias de per[uú] en vivo por internet).*", "");
         return cleaned.replaceAll("\\s+", " ").trim();
     }

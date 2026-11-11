@@ -4,7 +4,6 @@ import com.limasegura.limasegurabackend.ingestion.fetch.ArticleFetcher;
 import com.limasegura.limasegurabackend.ingestion.llm.IncidentExtractionService;
 import com.limasegura.limasegurabackend.model.SourceItem;
 import com.limasegura.limasegurabackend.model.SourceItemStatus;
-import com.limasegura.limasegurabackend.model.SourceType;
 import com.limasegura.limasegurabackend.repository.SourceItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -27,30 +26,38 @@ public class PipelineRecoveryJob {
     @Value("${ingestion.enabled:false}")
     private boolean ingestionEnabled;
 
-    @Scheduled(fixedDelay = 120000)
-    @org.springframework.transaction.annotation.Transactional
+    @Scheduled(initialDelay = 3000, fixedDelay = 30000)
     public void recover() {
         if (!ingestionEnabled) {
             return;
         }
         LocalDateTime now = LocalDateTime.now();
-        List<SourceItemStatus> statuses = List.of(SourceItemStatus.DISCOVERED, SourceItemStatus.CONTENT_READY);
-        
-        // Find items that need processing and haven't exceeded max attempts
-        List<SourceItem> items = sourceItemRepository.findByStatusInAndRetryable(statuses, now, 5);
-        
-        for (SourceItem item : items) {
+
+        List<SourceItem> readyItems = sourceItemRepository.findByStatusInAndRetryable(
+                List.of(SourceItemStatus.CONTENT_READY), now, 5);
+        int extractedCount = 0;
+        for (SourceItem item : readyItems) {
+            if (extractedCount >= 15) break;
             try {
-                if (item.getStatus() == SourceItemStatus.DISCOVERED) {
-                    log.info("Recovering fetch for item {} (type: {})", item.getId(), 
-                        item.getNewsSource() != null ? item.getNewsSource().getType() : "UNKNOWN");
-                    articleFetcher.fetchContent(item.getId());
-                } else if (item.getStatus() == SourceItemStatus.CONTENT_READY) {
-                    log.info("Recovering extraction for item {}", item.getId());
-                    extractionService.extractIncidents(item.getId());
-                }
+                log.info("Recovering extraction for item {}", item.getId());
+                extractionService.extractIncidents(item.getId());
+                extractedCount++;
             } catch (Exception e) {
-                log.error("Error recovering item {}: {}", item.getId(), e.getMessage());
+                log.error("Error recovering extraction for item {}: {}", item.getId(), e.getMessage());
+            }
+        }
+
+        List<SourceItem> discoveredItems = sourceItemRepository.findByStatusInAndRetryable(
+                List.of(SourceItemStatus.DISCOVERED), now, 5);
+        int fetchedCount = 0;
+        for (SourceItem item : discoveredItems) {
+            if (fetchedCount >= 20) break;
+            try {
+                log.info("Recovering fetch for item {}", item.getId());
+                articleFetcher.fetchContent(item.getId());
+                fetchedCount++;
+            } catch (Exception e) {
+                log.error("Error recovering fetch for item {}: {}", item.getId(), e.getMessage());
             }
         }
     }
