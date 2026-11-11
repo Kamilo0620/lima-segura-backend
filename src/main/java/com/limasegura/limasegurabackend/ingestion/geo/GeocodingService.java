@@ -154,7 +154,9 @@ public class GeocodingService {
                 double[] clamped = clampToLimaLand(base[0] + microJitterLat, base[1] + microJitterLng);
                 incident.setLat(clamped[0]);
                 incident.setLng(clamped[1]);
-                incident.setGeoPrecision(GeoPrecision.ADDRESS);
+                // Una avenida mide kilómetros: un punto fijo es solo aproximado (zona), no una dirección exacta
+                boolean isStreet = key.startsWith("av ") || key.startsWith("jr ") || key.startsWith("calle ");
+                incident.setGeoPrecision(isStreet ? GeoPrecision.NEIGHBORHOOD : GeoPrecision.INTERSECTION);
                 log.info("Geocoded '{}' via Lima precision gazetteer ('{}') -> [{}, {}]",
                         incident.getTitle(), key, incident.getLat(), incident.getLng());
                 return;
@@ -184,9 +186,8 @@ public class GeocodingService {
             double[] clamped = clampToLimaLand(llmLat + microJitterLat, llmLng + microJitterLng);
             incident.setLat(clamped[0]);
             incident.setLng(clamped[1]);
-            incident.setGeoPrecision(incident.getAddress() != null && !incident.getAddress().isBlank()
-                    ? GeoPrecision.ADDRESS
-                    : GeoPrecision.DISTRICT);
+            // Coordenadas estimadas por la IA: aproximadas, nunca "dirección exacta"
+            incident.setGeoPrecision(GeoPrecision.NEIGHBORHOOD);
             log.info("Geocoded '{}' via Gemini precision coordinates -> [{}, {}]",
                     incident.getTitle(), incident.getLat(), incident.getLng());
             return;

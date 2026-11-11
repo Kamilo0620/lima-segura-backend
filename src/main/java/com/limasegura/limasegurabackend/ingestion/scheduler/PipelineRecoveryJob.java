@@ -26,7 +26,8 @@ public class PipelineRecoveryJob {
     @Value("${ingestion.enabled:false}")
     private boolean ingestionEnabled;
 
-    @Scheduled(initialDelay = 3000, fixedDelay = 30000)
+    // Cada 2 minutos (con 30 s de espera al arrancar) para no gastar la cuota de la IA
+    @Scheduled(initialDelay = 30000, fixedDelay = 120000)
     public void recover() {
         if (!ingestionEnabled) {
             return;

@@ -17,7 +17,6 @@ import org.springframework.web.client.RestClient;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -37,8 +36,6 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         return RestClient.builder().requestFactory(factory).build();
     }
 
-    private final AtomicInteger keyCursor = new AtomicInteger(0);
-    private final AtomicInteger modelCursor = new AtomicInteger(0);
     private final ThreadLocal<String> lastUsedModel = new ThreadLocal<>();
 
     @Override
@@ -56,22 +53,15 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             throw new LlmExtractionException("No LLM API keys configured in environment (.env)");
         }
 
-        int totalKeys = keys.size();
-        int totalModels = models.size();
-        int maxAttempts = Math.max(totalKeys * totalModels, 1);
-
-        int startKeyIdx = Math.floorMod(keyCursor.getAndIncrement(), totalKeys);
-        int startModelIdx = Math.floorMod(modelCursor.getAndIncrement(), totalModels);
+        // Una sola key; se prueba el modelo principal y, solo si falla, los de respaldo en orden
+        String currentKey = keys.get(0);
+        String maskedKeyId = "Key#1";
+        int maxAttempts = models.size();
 
         Exception lastError = null;
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            int keyIdx = (startKeyIdx + attempt) % totalKeys;
-            int modelIdx = (startModelIdx + attempt) % totalModels;
-
-            String currentKey = keys.get(keyIdx);
-            String currentModel = models.get(modelIdx);
-            String maskedKeyId = "Key#" + (keyIdx + 1);
+            String currentModel = models.get(attempt);
 
             try {
                 ObjectNode requestBody = objectMapper.createObjectNode();
@@ -115,8 +105,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         }
 
         String safeError = lastError != null ? redactSecrets(lastError.getMessage(), keys) : "Unknown LLM error";
-        log.error("All {} LLM key/model combinations failed. Last error: {}", maxAttempts, safeError);
-        throw new LlmExtractionException("Error calling LLM API across pool: " + safeError);
+        log.error("All {} LLM model attempts failed. Last error: {}", maxAttempts, safeError);
+        throw new LlmExtractionException("Error calling LLM API: " + safeError);
     }
 
     private String redactSecrets(String input, List<String> secrets) {

@@ -109,22 +109,10 @@ public class IngestionScheduler {
                     itemsNew++;
 
                     eventPublisher.publishEvent(new SourceItemDiscoveredEvent(this, item.getId()));
-                } else {
-                    SourceItem existing = existingOpt.get();
-                    if (existing.getStatus() == SourceItemStatus.FAILED
-                            || existing.getStatus() == SourceItemStatus.DISCOVERED
-                            || existing.getStatus() == SourceItemStatus.CONTENT_READY) {
-                        existing.setStatus(SourceItemStatus.DISCOVERED);
-                        existing.setAttempts(0);
-                        existing.setError(null);
-                        if (dItem.getPublishedAt() != null) {
-                            existing.setPublishedAt(dItem.getPublishedAt());
-                        }
-                        sourceItemRepository.save(existing);
-                        itemsNew++;
-                        eventPublisher.publishEvent(new SourceItemDiscoveredEvent(this, existing.getId()));
-                    }
                 }
+                // Si ya existía no lo tocamos: los reintentos los maneja PipelineRecoveryJob,
+                // respetando el límite de intentos (antes se reiniciaba a 0 en cada ciclo y
+                // se reintentaba para siempre, gastando la cuota de la IA).
             }
 
             run.setItemsFound(itemsFound);
