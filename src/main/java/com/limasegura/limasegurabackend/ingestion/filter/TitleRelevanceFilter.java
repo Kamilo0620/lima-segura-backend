@@ -12,6 +12,7 @@ import java.util.Locale;
  * que representen un riesgo real para las personas en Lima Metropolitana y el Callao
  * (robos, asaltos, sicariato, homicidios, balaceras, feminicidios, extorsiones, secuestros, agresiones).
  */
+
 @Component
 public class TitleRelevanceFilter {
 
@@ -94,10 +95,13 @@ public class TitleRelevanceFilter {
         }
 
         String normTitle = normalize(title);
-        String normContent = content != null ? normalize(content) : "";
         String normUrl = url != null ? normalize(url) : "";
-        String combinedTitleUrl = normTitle + " " + normUrl;
-        String fullText = combinedTitleUrl + " " + normContent;
+        // Las exclusiones se buscan SOLO en el título y la URL, y como PALABRAS COMPLETAS.
+        // Antes se buscaban como pedazos de texto en todo el artículo: "ica" (la ciudad) coincidía con
+        // "larepublica.pe" o "pública", y se descartaban delitos reales de Lima.
+        // El cuerpo de la noticia suele mencionar otros lugares de pasada; la ubicación real la decide
+        // después la IA y la validación de distrito de Lima/Callao.
+        String fullText = normTitle + " " + normUrl;
 
         if (isExcludedText(normTitle, fullText)) {
             return false;
@@ -130,14 +134,14 @@ public class TitleRelevanceFilter {
 
         if (!isFemicideOrHomicide) {
             for (String domestic : DOMESTIC_VIOLENCE_EXCLUSIONS) {
-                if (fullText.contains(domestic)) {
+                if (containsTerm(fullText, domestic)) {
                     return true;
                 }
             }
         }
 
         for (String excluded : STRICT_EXCLUSIONS) {
-            if (fullText.contains(excluded)) {
+            if (containsTerm(fullText, excluded)) {
                 if (isLimaAvenueMention(fullText, excluded)) {
                     continue;
                 }
@@ -145,6 +149,23 @@ public class TitleRelevanceFilter {
             }
         }
         return false;
+    }
+
+    /** Coincidencia por palabra completa (las rutas tipo "/mundo/" se buscan tal cual). */
+    private static boolean containsTerm(String text, String term) {
+        if (term.startsWith("/") || term.startsWith("(")) {
+            return text.contains(term);
+        }
+        int from = 0;
+        while (true) {
+            int idx = text.indexOf(term, from);
+            if (idx < 0) return false;
+            int end = idx + term.length();
+            boolean leftOk = idx == 0 || !Character.isLetterOrDigit(text.charAt(idx - 1));
+            boolean rightOk = end >= text.length() || !Character.isLetterOrDigit(text.charAt(end));
+            if (leftOk && rightOk) return true;
+            from = idx + 1;
+        }
     }
 
     private boolean isLimaAvenueMention(String normText, String term) {

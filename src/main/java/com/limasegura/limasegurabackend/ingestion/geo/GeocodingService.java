@@ -213,7 +213,8 @@ public class GeocodingService {
             double[] clamped = clampToLimaLand(llmLat + microJitterLat, llmLng + microJitterLng);
             incident.setLat(clamped[0]);
             incident.setLng(clamped[1]);
-            incident.setGeoPrecision(!genericAddress ? GeoPrecision.ADDRESS : GeoPrecision.DISTRICT);
+            // Coordenadas estimadas por la IA: aproximadas, nunca "dirección exacta"
+            incident.setGeoPrecision(!genericAddress ? GeoPrecision.NEIGHBORHOOD : GeoPrecision.DISTRICT);
             log.info("Geocoded '{}' via Gemini precision coordinates -> [{}, {}]",
                     incident.getTitle(), incident.getLat(), incident.getLng());
             return;

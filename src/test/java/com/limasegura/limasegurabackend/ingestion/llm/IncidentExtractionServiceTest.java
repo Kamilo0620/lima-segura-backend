@@ -122,6 +122,7 @@ class IncidentExtractionServiceTest {
                 .thenReturn(District.builder().ubigeo("150131").name("San Isidro").province("Lima").department("Lima")
                         .centroidLat(-12.098).centroidLng(-77.035).build());
 
+        String recentTimestamp = LocalDateTime.now().minusDays(1).withNano(0).toString();
         String mockLlmJson = """
         {
           "incidents": [
@@ -129,7 +130,7 @@ class IncidentExtractionServiceTest {
               "incident_type": "ROBBERY",
               "title": "Asalto armado en Av. Javier Prado",
               "summary": "Dos sujetos en moto asaltaron a transeúntes en San Isidro",
-              "occurred_at": "2026-11-14T12:00:00",
+              "occurred_at": "%s",
               "location": {
                 "address_text": "Av. Javier Prado Este 1200",
                 "district": "San Isidro",
@@ -142,15 +143,19 @@ class IncidentExtractionServiceTest {
             }
           ]
         }
-        """;
+        """.formatted(recentTimestamp);
 
         when(llmClient.chat(any(), any())).thenReturn(mockLlmJson);
-        when(deduplicationService.deduplicateOrCreate(any(), any())).thenAnswer(invocation -> {
+        doAnswer(invocation -> {
             Incident inc = invocation.getArgument(0);
-            inc.setId(500L);
             inc.setGeoPrecision(GeoPrecision.ADDRESS);
             inc.setLat(-12.089);
             inc.setLng(-77.034);
+            return null;
+        }).when(geocodingService).geocodeIncident(any(), any(), any(), any());
+        when(deduplicationService.deduplicateOrCreate(any(), any())).thenAnswer(invocation -> {
+            Incident inc = invocation.getArgument(0);
+            inc.setId(500L);
             return inc;
         });
 

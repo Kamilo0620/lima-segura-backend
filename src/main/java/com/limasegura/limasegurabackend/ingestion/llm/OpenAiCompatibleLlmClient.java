@@ -19,7 +19,6 @@ import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.atomic.AtomicInteger;
 
 @Slf4j
 @Service
@@ -35,12 +34,12 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
                 .connectTimeout(Duration.ofSeconds(10))
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
-        factory.setReadTimeout(Duration.ofSeconds(25));
+        // Gemini "piensa" antes de responder: con noticias largas puede tardar más de 25 s.
+        // Con 25 s se cancelaban llamadas válidas ("Request cancelled").
+        factory.setReadTimeout(Duration.ofSeconds(90));
         return RestClient.builder().requestFactory(factory).build();
     }
 
-    private final AtomicInteger keyCursor = new AtomicInteger(0);
-    private final AtomicInteger modelCursor = new AtomicInteger(0);
     private final ThreadLocal<String> lastUsedModel = new ThreadLocal<>();
     private final Map<String, Long> quotaCooldownUntilMs = new ConcurrentHashMap<>();
 
@@ -59,26 +58,19 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             throw new LlmExtractionException("No LLM API keys configured in environment (.env)");
         }
 
-        int totalKeys = keys.size();
-        int totalModels = models.size();
-        int maxAttempts = Math.max(totalKeys * totalModels, 1);
-
-        int startKeyIdx = Math.floorMod(keyCursor.getAndIncrement(), totalKeys);
-        int startModelIdx = Math.floorMod(modelCursor.getAndIncrement(), totalModels);
+        // Una sola key; se prueba el modelo principal y, solo si falla, los de respaldo en orden
+        String currentKey = keys.get(0);
+        String maskedKeyId = "Key#1";
+        int maxAttempts = models.size();
 
         Exception lastError = null;
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
-            int keyIdx = (startKeyIdx + attempt) % totalKeys;
-            int modelIdx = (startModelIdx + attempt) % totalModels;
-
-            String currentKey = keys.get(keyIdx);
-            String currentModel = models.get(modelIdx);
-            String maskedKeyId = "Key#" + (keyIdx + 1);
+            String currentModel = models.get(attempt);
             String slotKey = maskedKeyId + ":" + currentModel;
 
             Long blockedUntil = quotaCooldownUntilMs.get(slotKey);
-            if (blockedUntil != null && blockedUntil > System.currentTimeMillis()) {
+            if (blockedUntil != null && blockedUntil > System.currentTimeMillis() && attempt < maxAttempts - 1) {
                 continue;
             }
 
@@ -127,8 +119,8 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
         }
 
         String safeError = lastError != null ? redactSecrets(lastError.getMessage(), keys) : "Unknown LLM error";
-        log.error("All {} LLM key/model combinations failed. Last error: {}", maxAttempts, safeError);
-        throw new LlmExtractionException("Error calling LLM API across pool: " + safeError);
+        log.error("All {} LLM model attempts failed. Last error: {}", maxAttempts, safeError);
+        throw new LlmExtractionException("Error calling LLM API: " + safeError);
     }
 
     private String redactSecrets(String input, List<String> secrets) {

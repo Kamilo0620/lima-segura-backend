@@ -6,6 +6,7 @@ import com.limasegura.limasegurabackend.config.LlmConfig;
 import com.limasegura.limasegurabackend.dto.llm.LlmExtractionResponse;
 import com.limasegura.limasegurabackend.dto.llm.LlmIncidentDto;
 import com.limasegura.limasegurabackend.event.IncidentPublishedEvent;
+import com.limasegura.limasegurabackend.exception.LlmExtractionException;
 import com.limasegura.limasegurabackend.ingestion.dedup.IncidentDeduplicationService;
 import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
 import com.limasegura.limasegurabackend.ingestion.geo.DistrictResolver;
@@ -196,11 +197,7 @@ public class IncidentExtractionService {
                 geocodingService.geocodeIncident(incident, llmLat, llmLng, landmark);
 
                 if (incident.getConfidence() >= ingestionConfig.getMinConfidence()
-                        && incident.getGeoPrecision() != null
-                        && (incident.getGeoPrecision() == GeoPrecision.ADDRESS
-                            || incident.getGeoPrecision() == GeoPrecision.EXACT_ADDRESS
-                            || incident.getGeoPrecision() == GeoPrecision.INTERSECTION
-                            || incident.getGeoPrecision() == GeoPrecision.DISTRICT)) {
+                        && isAtLeastDistrictPrecision(incident.getGeoPrecision())) {
                     incident.setStatus(IncidentStatus.PUBLISHED);
                 } else {
                     incident.setStatus(IncidentStatus.PENDING_REVIEW);
@@ -213,20 +210,40 @@ public class IncidentExtractionService {
                 attachCorroborationsToSaved(saved, dossier);
 
                 publishedCount++;
-                eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
-                if (activityTracker != null) {
-                    String srcName = item.getNewsSource() != null ? item.getNewsSource().getName() : "Prensa/TV";
-                    String distName = saved.getDistrict() != null ? saved.getDistrict().getName() : "Lima/Callao";
-                    activityTracker.record("PUBLISHED", "INFO", srcName,
-                            "Publicado #" + saved.getId() + " (" + distName + "): " + saved.getTitle());
+                // Solo avisamos en tiempo real lo que de verdad quedó publicado en el mapa
+                if (saved.getStatus() == IncidentStatus.PUBLISHED) {
+                    eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
+                    if (activityTracker != null) {
+                        String srcName = item.getNewsSource() != null ? item.getNewsSource().getName() : "Prensa/TV";
+                        String distName = saved.getDistrict() != null ? saved.getDistrict().getName() : "Lima/Callao";
+                        activityTracker.record("PUBLISHED", "INFO", srcName,
+                                "Publicado #" + saved.getId() + " (" + distName + "): " + saved.getTitle());
+                    }
                 }
             }
 
             item.setStatus(publishedCount > 0 ? SourceItemStatus.EXTRACTED : SourceItemStatus.DISCARDED);
             sourceItemRepository.save(item);
 
+        } catch (LlmExtractionException e) {
+            // La IA no respondió (tiempo de espera, límite por minuto, caída). Es temporal:
+            // reintentamos más tarde en vez de mandar la noticia al plan B sin IA.
+            int nextAttempt = (item.getAttempts() != null ? item.getAttempts() : 0) + 1;
+            if (nextAttempt < ingestionConfig.getMaxAttempts()) {
+                item.setAttempts(nextAttempt);
+                item.setNextAttemptAt(LocalDateTime.now().plusMinutes(5L * nextAttempt));
+                String msg = e.getMessage() != null ? e.getMessage() : "LLM error";
+                item.setError("IA no disponible (intento " + nextAttempt + "): " + msg.substring(0, Math.min(msg.length(), 300)));
+                sourceItemRepository.save(item);
+                log.warn("LLM unavailable for item {} (attempt {}/{}), will retry in {} min: {}",
+                        sourceItemId, nextAttempt, ingestionConfig.getMaxAttempts(), 5 * nextAttempt, msg);
+                return;
+            }
+            log.warn("LLM failed {} times for item {}, using keyword fallback (result stays PENDING_REVIEW): {}",
+                    nextAttempt, sourceItemId, e.getMessage());
+            extractVerifiedCrimeOnQuotaLimit(item, contentText, dossier);
         } catch (Exception e) {
-            log.warn("LLM quota/connection limit on pre-verified crime item {} ({}), applying strict Lima/Callao crime extractor: {}",
+            log.warn("LLM failed for item {} ({}), using keyword fallback (result stays PENDING_REVIEW): {}",
                     sourceItemId, e.getClass().getSimpleName(), e.getMessage());
             extractVerifiedCrimeOnQuotaLimit(item, contentText, dossier);
         }
@@ -266,7 +283,7 @@ public class IncidentExtractionService {
         }
 
         String lower = combined.toLowerCase(Locale.ROOT);
-        IncidentType type = IncidentType.ROBBERY;
+        IncidentType type = IncidentType.OTHER; // si ninguna palabra clave coincide, no adivinamos
         if (lower.contains("feminicidio") || (lower.contains("hallan sin vida") && lower.contains("estudiante"))) {
             type = IncidentType.FEMICIDE;
         } else if (lower.contains("asesin") || lower.contains("homicidio") || lower.contains("sicari") || lower.contains("acribill") || lower.contains("matan a")) {
@@ -289,20 +306,9 @@ public class IncidentExtractionService {
             type = IncidentType.ASSAULT;
         }
 
+        // Sin IA no podemos verificar los datos: guardamos SOLO lo que dice la noticia,
+        // sin texto, confianza, hora ni víctimas inventadas, y lo dejamos PENDIENTE para revisión.
         String cleanBody = cleanContent.replace(title, "").replaceAll("\\s+", " ").trim();
-        String detailedSummary;
-        if (cleanBody.length() > 80) {
-            String excerpt = cleanBody.substring(0, Math.min(cleanBody.length(), 480));
-            detailedSummary = excerpt + (excerpt.endsWith(".") ? "" : ". ")
-                    + "Efectivos de la Policía Nacional del Perú (PNP) y personal de Serenazgo de "
-                    + district.getName()
-                    + " acudieron a la zona para acordonar el perímetro, recabar imágenes de cámaras de videovigilancia e iniciar las diligencias de ley.";
-        } else {
-            detailedSummary = title + ". El hecho delictivo se registró en la jurisdicción de "
-                    + district.getName()
-                    + ", movilizando a unidades de emergencia de la Policía Nacional del Perú y patrullaje integrado. "
-                    + "Los agentes policiales recopilaron testimonios de testigos y registros de cámaras de seguridad cercanas para identificar a los implicados.";
-        }
 
         Incident incident = new Incident();
         incident.setIncidentType(type);
@@ -310,47 +316,57 @@ public class IncidentExtractionService {
                 ? IncidentOrigin.YOUTUBE
                 : IncidentOrigin.NEWSPAPER);
         incident.setTitle(title.length() > 200 ? title.substring(0, 200) : title);
-        incident.setSummary(detailedSummary);
-        double baseConf = dossier != null && !dossier.corroboratedSources().isEmpty() ? 0.90 : 0.80;
-        incident.setConfidence(baseConf);
-        incident.setLlmModel("deterministic-cross-verified-extractor");
+        incident.setSummary(cleanBody.isEmpty() ? null : cleanBody.substring(0, Math.min(cleanBody.length(), 480)));
+        incident.setConfidence(0.3);   // baja: clasificado por palabras clave, no por IA
+        incident.setLlmModel(null);    // no se usó ningún modelo
         incident.setEvidenceExcerpt(cleanBody.length() > 20
-                ? cleanBody.substring(0, Math.min(cleanBody.length(), 195))
+                ? cleanBody.substring(0, Math.min(cleanBody.length(), 295))
                 : title);
-        incident.setVictimsCount(1);
+        incident.setVictimsCount(null); // desconocido
         incident.setIncidentCount(1);
 
+        LocalDateTime now = LocalDateTime.now(ExactEventParser.LIMA_ZONE);
         ExactEventParser.ResolvedEventTime resolvedTime = dossier != null && dossier.resolvedEventTime() != null
                 ? dossier.resolvedEventTime()
                 : exactEventParser.resolveExactOccurredAt(combined, item.getPublishedAt());
-        incident.setOccurredAt(resolvedTime.occurredAt());
-        incident.setOccurredAtPrecision(resolvedTime.exactHourFound()
-                ? OccurredAtPrecision.EXACT
-                : OccurredAtPrecision.APPROXIMATE);
+        if (resolvedTime.exactHourFound()) {
+            incident.setOccurredAt(resolvedTime.occurredAt());
+            incident.setOccurredAtPrecision(OccurredAtPrecision.EXACT);
+        } else {
+            incident.setOccurredAt(item.getPublishedAt() != null && !item.getPublishedAt().isAfter(now)
+                    ? item.getPublishedAt()
+                    : now);
+            incident.setOccurredAtPrecision(OccurredAtPrecision.UNKNOWN);
+        }
 
         incident.setDistrict(district);
         String exactStreet = dossier != null && dossier.suggestedExactAddress() != null
                 ? dossier.suggestedExactAddress()
                 : exactEventParser.extractExactStreetAddress(combined);
-        incident.setAddress(exactStreet != null && !exactStreet.isBlank()
-                ? exactStreet
-                : "Jurisdicción de " + district.getName());
+        incident.setAddress(exactStreet != null && !exactStreet.isBlank() ? exactStreet : null);
         incident.setSourceItems(new HashSet<>());
 
         geocodingService.geocodeIncident(incident, null, null, exactStreet != null ? exactStreet : title);
-        incident.setStatus(IncidentStatus.PUBLISHED);
+        incident.setStatus(IncidentStatus.PENDING_REVIEW);
 
         Incident saved = deduplicationService.deduplicateOrCreate(incident, item);
-        saved.setStatus(IncidentStatus.PUBLISHED);
         attachCorroborationsToSaved(saved, dossier);
 
         item.setStatus(SourceItemStatus.EXTRACTED);
-        item.setError(null);
+        item.setError("Extraído sin IA (fallback por palabras clave): requiere revisión");
         sourceItemRepository.save(item);
 
-        eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
-        log.info("Extracted & published verified Lima/Callao crime incident '{}' in district '{}'",
-                saved.getTitle(), district.getName());
+        log.info("Fallback without LLM: incident '{}' in district '{}' saved as PENDING_REVIEW (id {})",
+                saved.getTitle(), district.getName(), saved.getId());
+    }
+
+    /** Se publica si la ubicación se conoce al menos a nivel de distrito. */
+    private boolean isAtLeastDistrictPrecision(GeoPrecision precision) {
+        return precision == GeoPrecision.EXACT_ADDRESS
+                || precision == GeoPrecision.ADDRESS
+                || precision == GeoPrecision.INTERSECTION
+                || precision == GeoPrecision.NEIGHBORHOOD
+                || precision == GeoPrecision.DISTRICT;
     }
 
     private void applyCrossVerifiedRefinements(Incident incident, CrossVerificationService.VerificationDossier dossier) {
@@ -490,6 +506,13 @@ public class IncidentExtractionService {
     }
 
     private boolean isOutsideLimaAndCallao(LlmIncidentDto dto) {
+        // Si la IA indica un departamento o provincia distinto de Lima/Callao, está fuera
+        if (dto.getLocation() != null) {
+            if (isKnownAndNotLimaCallao(dto.getLocation().getDepartment())
+                    || isKnownAndNotLimaCallao(dto.getLocation().getProvince())) {
+                return true;
+            }
+        }
         StringBuilder sb = new StringBuilder();
         if (dto.getLocation() != null) {
             if (dto.getLocation().getDepartment() != null) sb.append(dto.getLocation().getDepartment()).append(" ");
@@ -500,6 +523,13 @@ public class IncidentExtractionService {
         if (dto.getSummary() != null) sb.append(dto.getSummary()).append(" ");
         String combined = sb.toString();
         return titleRelevanceFilter.isExcludedCrimeCategory(dto.getTitle(), combined);
+    }
+
+    private boolean isKnownAndNotLimaCallao(String place) {
+        if (place == null || place.isBlank()) return false;
+        String norm = Normalizer.normalize(place.toLowerCase(Locale.ROOT), Normalizer.Form.NFD)
+                .replaceAll("\\p{M}", "").trim();
+        return !(norm.contains("lima") || norm.contains("callao"));
     }
 
     private String cleanJsonResponse(String response) {
