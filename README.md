@@ -69,8 +69,8 @@ Resolver este problema tiene un impacto directo en la seguridad y calidad de vid
 - **Mapa de calor:** puntos ponderados por gravedad del delito, credibilidad de la fuente y antigüedad del hecho.
 - **Búsqueda y paginación:** listado de incidentes paginado con filtros por tipo, distrito, estado, origen, rango de fechas y búsqueda por texto (`search`).
 - **Moderación:** el administrador puede revisar, publicar o rechazar incidentes.
-- **Ingesta automática de noticias (experimental, apagada por defecto):** conectores RSS, HTML y YouTube que descubren noticias y las estructuran con un LLM. Se activa con `INGESTION_ENABLED=true`. Sin LLM configurado, la extracción heurística deja los incidentes en `PENDING_REVIEW` para revisión manual.
-- **Eventos en tiempo real:** feed Server-Sent Events con los incidentes recién publicados.
+- **Ingesta automática de noticias con IA (Google Gemini):** cada 5 minutos se revisan periódicos (RSS/HTML) y canales de noticias de YouTube (feed RSS). Un filtro de títulos descarta lo que no es un delito en Lima/Callao y **Gemini** (`gemini-3.8-flash`, vía su API compatible con OpenAI) extrae tipo de delito, distrito, dirección y fecha. Se publica si la confianza es ≥ 0.75 y la ubicación se conoce al menos a nivel de distrito. Si Gemini no responde (límite gratuito, saturación, tiempo de espera) la noticia se **reintenta** a los 5, 10, 15… minutos; tras 5 fallos, una extracción por palabras clave la deja en `PENDING_REVIEW`, **sin inventar** resumen, hora ni víctimas. Apagada por defecto (`INGESTION_ENABLED=false`).
+- **Eventos en tiempo real:** feed Server-Sent Events (`GET /api/v1/incidents/stream`, evento `incident_published`) con los incidentes recién publicados; la web lo usa para las notificaciones.
 
 ### Tecnologías Utilizadas
 
@@ -220,6 +220,20 @@ Las tablas se crean con **Flyway** al arrancar la aplicación (`spring.jpa.hiber
    ```
 4. La API queda en `http://localhost:8080`.
 
+### Activar la ingesta de noticias con Gemini (opcional)
+
+1. Crear una API key gratuita en [Google AI Studio](https://aistudio.google.com) → *Claves de API* → *Crear clave de API* (si no hay proyecto, crear uno; con cuentas institucionales puede fallar, usar una cuenta personal).
+2. Copiar `.env.example` a `.env` en la raíz del proyecto (al lado de `pom.xml`) y completar:
+   ```env
+   INGESTION_ENABLED=true
+   LLM_API_KEY=tu_api_key
+   LLM_MODEL=gemini-3.8-flash
+   ```
+   El archivo `.env` está en `.gitignore`: **nunca** subir la clave al repositorio ni compartirla.
+3. Reiniciar el backend. En la consola deben aparecer `Starting scheduled ingestion cycle`, `LLM extraction succeeded` y `Broadcasting new incident ... via SSE`.
+
+> El plan gratuito de Gemini tiene un límite de llamadas por minuto y por día. Los errores `429` o `503` son normales en picos: el backend reintenta solo.
+
 ### Variables de Entorno
 
 | Variable | Descripción | Por defecto |
@@ -229,10 +243,23 @@ Las tablas se crean con **Flyway** al arrancar la aplicación (`spring.jpa.hiber
 | `JWT_SECRET` | Clave para firmar los JWT | Valor de desarrollo (cambiar en producción) |
 | `CORS_ALLOWED_ORIGINS` | Orígenes permitidos (separados por coma) | `http://localhost:5173,http://localhost:8081` |
 | `INGESTION_ENABLED` | Activa la ingesta automática de noticias | `false` |
-| `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` | Proveedor LLM compatible con OpenAI | Vacío |
+| `LLM_API_KEY` | API key de Gemini (una sola) | Vacío |
+| `LLM_BASE_URL` | Endpoint compatible con OpenAI | `https://generativelanguage.googleapis.com/v1beta/openai` |
+| `LLM_MODEL` | Modelo principal | `gemini-3.8-flash` |
+| `LLM_MODELS` | Modelos de respaldo opcionales (separados por coma), solo si el principal falla | Vacío |
 | `WORKER_API_TOKEN` | Token del worker de transcripción | Vacío |
 
+Estas variables se pueden definir en el archivo `.env` (lo lee Spring al arrancar) o como variables de entorno del sistema / de IntelliJ.
+
 > **Importante:** el usuario administrador inicial (`admin@limasegura.pe`) se crea con una contraseña de desarrollo. Cámbienla antes de desplegar.
+
+### Colección de Postman
+
+`postman_collection.json` (raíz del repo) cubre **54 peticiones** organizadas en carpetas: salud, autenticación, incidentes públicos, reportes ciudadanos con el flujo completo de 3 confirmaciones, usuarios, zonas y categorías, administración de la ingesta y predicciones. Incluye casos de error (400, 401, 403, 404, 409) y tests automáticos.
+
+1. Postman → *Import* → seleccionar `postman_collection.json`.
+2. Con el backend levantado, *Run collection*. Los logins guardan los tokens en variables (`user_token`, `admin_token`…) y los correos de prueba se generan solos, así que se puede ejecutar varias veces.
+3. Para probar el servidor desplegado, cambiar `root_url` y `base_url` en las variables de la colección.
 
 ---
 
@@ -246,17 +273,18 @@ El trabajo se organizó con ramas por funcionalidad y Pull Requests hacia `main`
 
 ### Logros del Proyecto
 
-Una API REST que combina reportes ciudadanos validados por la comunidad, datos oficiales importados por CSV y un pipeline experimental de noticias, con autenticación JWT por roles, manejo centralizado de errores, eventos asíncronos y migraciones versionadas.
+Una API REST que combina reportes ciudadanos validados por la comunidad, datos oficiales importados por CSV y un pipeline de noticias procesadas con IA (Gemini), con autenticación JWT por roles, manejo centralizado de errores, eventos asíncronos y migraciones versionadas.
 
 ### Aprendizajes Clave
 
 - La disciplina de control de versiones (ramas, PRs y `main` protegida) es tan importante como el código: dos veces se perdió trabajo por cambios directos a `main`.
 - Los datos de ejemplo deben identificarse como tales; presentarlos como datos reales resta credibilidad al sistema.
-- Las funciones que dependen de servicios externos (LLM, YouTube) deben poder apagarse para no comprometer la estabilidad.
+- Las funciones que dependen de servicios externos (LLM, YouTube) deben poder apagarse y tolerar fallos temporales (reintentos) sin inventar datos cuando la IA no responde.
 
 ## Trabajo Futuro
 - Modelo predictivo real de riesgo por zona, día y hora a partir de los conteos agregados.
-- Activar la ingesta de noticias con un LLM configurado y mejorar la geolocalización (direcciones exactas en vez del centroide del distrito).
+- Mejorar la geolocalización de las noticias (direcciones exactas en vez de puntos aproximados por zona o distrito).
+- Evitar notificaciones repetidas cuando varios medios publican el mismo hecho (hoy se unen en un solo incidente, pero se avisa más de una vez).
 - Notificaciones por correo con plantillas HTML (Thymeleaf) al publicarse un reporte y para las suscripciones por zona.
 - Refresh tokens para renovar la sesión sin un nuevo login.
 - Mayor cobertura de pruebas automatizadas.
