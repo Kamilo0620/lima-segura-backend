@@ -5,6 +5,7 @@ import com.limasegura.limasegurabackend.event.SourceItemDiscoveredEvent;
 import com.limasegura.limasegurabackend.ingestion.connector.DiscoveredItem;
 import com.limasegura.limasegurabackend.ingestion.connector.SourceConnector;
 import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
+import com.limasegura.limasegurabackend.ingestion.telemetry.PipelineActivityTracker;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.IngestionRunRepository;
 import com.limasegura.limasegurabackend.repository.NewsSourceRepository;
@@ -12,13 +13,17 @@ import com.limasegura.limasegurabackend.repository.SourceItemRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.List;
 
 @Slf4j
@@ -32,6 +37,9 @@ public class IngestionScheduler {
     private final List<SourceConnector> connectors;
     private final ApplicationEventPublisher eventPublisher;
     private final TitleRelevanceFilter titleRelevanceFilter = new TitleRelevanceFilter();
+
+    @Autowired(required = false)
+    private PipelineActivityTracker activityTracker;
 
     /** Ingesta automática apagada por defecto. Se activa con INGESTION_ENABLED=true. */
     @Value("${ingestion.enabled:false}")
@@ -50,16 +58,27 @@ public class IngestionScheduler {
     public int triggerAllSources() {
         log.info("Starting ingestion cycle for all active sources");
         List<NewsSource> activeSources = newsSourceRepository.findByActiveTrue();
-
-        for (NewsSource source : activeSources) {
-            try {
-                processSource(source);
-            } catch (Exception e) {
-                log.error("Error processing source {}: {}", source.getName(), e.getMessage());
+        PipelineActivityTracker.OperationToken token = activityTracker != null
+                ? activityTracker.startOperation(
+                        "Buscando noticias nuevas en " + activeSources.size() + " fuentes de prensa/TV/PNP...",
+                        "INGESTION_CYCLE",
+                        "Scheduler")
+                : null;
+        try {
+            for (NewsSource source : activeSources) {
+                try {
+                    processSource(source);
+                } catch (Exception e) {
+                    log.error("Error processing source {}: {}", source.getName(), e.getMessage());
+                }
+            }
+            log.info("Ingestion cycle completed for {} sources", activeSources.size());
+            return activeSources.size();
+        } finally {
+            if (activityTracker != null && token != null) {
+                activityTracker.finishOperation(token);
             }
         }
-        log.info("Ingestion cycle completed for {} sources", activeSources.size());
-        return activeSources.size();
     }
 
     @Transactional
@@ -89,15 +108,19 @@ public class IngestionScheduler {
                     continue;
                 }
 
+                String safeExternalId = normalizeExternalId(dItem.getExternalId(), dItem.getUrl(), dItem.getTitle());
+                String safeUrl = truncateText(dItem.getUrl(), 990);
+                String safeTitle = truncateText(dItem.getTitle(), 490);
+
                 java.util.Optional<SourceItem> existingOpt = sourceItemRepository.findByNewsSourceIdAndExternalId(
-                        source.getId(), dItem.getExternalId());
+                        source.getId(), safeExternalId);
 
                 if (existingOpt.isEmpty()) {
                     SourceItem item = SourceItem.builder()
                             .newsSource(source)
-                            .externalId(dItem.getExternalId())
-                            .url(dItem.getUrl())
-                            .title(dItem.getTitle())
+                            .externalId(safeExternalId)
+                            .url(safeUrl)
+                            .title(safeTitle)
                             .contentText(dItem.getContentText())
                             .publishedAt(dItem.getPublishedAt())
                             .status(SourceItemStatus.DISCOVERED)
@@ -125,6 +148,10 @@ public class IngestionScheduler {
             source.setLastError(null);
 
             log.info("Ingestion for source '{}': found={}, new (crime-filtered)={}", source.getName(), itemsFound, itemsNew);
+            if (activityTracker != null && (itemsNew > 0 || itemsFound > 0)) {
+                activityTracker.record("RSS_POLL", "INFO", source.getName(),
+                        "Hallados " + itemsFound + " titulares -> +" + itemsNew + " nuevos en cola de extracción");
+            }
 
         } catch (Exception e) {
             log.error("Ingestion failed for source '{}': {}", source.getName(), e.getMessage());
@@ -134,12 +161,34 @@ public class IngestionScheduler {
 
             source.setConsecutiveFailures(
                     (source.getConsecutiveFailures() != null ? source.getConsecutiveFailures() : 0) + 1);
-            source.setLastError(e.getMessage());
+            source.setLastError(truncateText(e.getMessage(), 480));
 
             eventPublisher.publishEvent(new IngestionFailedEvent(this, source.getId(), e.getMessage()));
         }
 
         ingestionRunRepository.save(run);
         newsSourceRepository.save(source);
+    }
+
+    private String normalizeExternalId(String rawExternalId, String url, String title) {
+        String candidate = rawExternalId != null && !rawExternalId.isBlank()
+                ? rawExternalId.trim()
+                : (url != null && !url.isBlank() ? url.trim() : (title != null ? title.trim() : "unknown"));
+        if (candidate.length() <= 480) {
+            return candidate;
+        }
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256").digest(candidate.getBytes(StandardCharsets.UTF_8));
+            return "sha256:" + HexFormat.of().formatHex(digest);
+        } catch (Exception e) {
+            return candidate.substring(0, 480);
+        }
+    }
+
+    private String truncateText(String value, int maxLen) {
+        if (value == null || value.length() <= maxLen) {
+            return value;
+        }
+        return value.substring(0, maxLen);
     }
 }

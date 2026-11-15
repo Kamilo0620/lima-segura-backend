@@ -17,6 +17,8 @@ import org.springframework.web.client.RestClient;
 import java.net.http.HttpClient;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Service
@@ -39,6 +41,7 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
     }
 
     private final ThreadLocal<String> lastUsedModel = new ThreadLocal<>();
+    private final Map<String, Long> quotaCooldownUntilMs = new ConcurrentHashMap<>();
 
     @Override
     public String getLastUsedModel() {
@@ -64,6 +67,12 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
 
         for (int attempt = 0; attempt < maxAttempts; attempt++) {
             String currentModel = models.get(attempt);
+            String slotKey = maskedKeyId + ":" + currentModel;
+
+            Long blockedUntil = quotaCooldownUntilMs.get(slotKey);
+            if (blockedUntil != null && blockedUntil > System.currentTimeMillis() && attempt < maxAttempts - 1) {
+                continue;
+            }
 
             try {
                 ObjectNode requestBody = objectMapper.createObjectNode();
@@ -101,6 +110,9 @@ public class OpenAiCompatibleLlmClient implements LlmClient {
             } catch (Exception e) {
                 lastError = e;
                 String safeMsg = redactSecrets(e.getMessage(), keys);
+                if (safeMsg.contains("429") || safeMsg.contains("RESOURCE_EXHAUSTED")) {
+                    quotaCooldownUntilMs.put(slotKey, System.currentTimeMillis() + 300_000L);
+                }
                 log.warn("LLM call attempt {}/{} failed on {} with model {}: {}",
                         attempt + 1, maxAttempts, maskedKeyId, currentModel, safeMsg);
             }

@@ -14,17 +14,21 @@ public class PromptFactory {
                 Reglas estrictas e innegociables de análisis y filtrado:
                 1. SOLO DELITOS CALLEJEROS Y DE RIESGO CIUDADANO EN LIMA Y CALLAO:
                    - Únicamente debes extraer delitos que pongan en riesgo físico o patrimonial directo a los ciudadanos en las calles, transporte o negocios de Lima Metropolitana o el Callao:
-                     robos, asaltos a mano armada, hurtos/arrebatos, sicariato, homicidios, asesinatos, balaceras/tiroteos, feminicidios, extorsiones/cobro de cupos/detonación de explosivos, secuestros, agresiones violentas en vía pública y captura de bandas armadas.
+                     robos, asaltos a mano armada, hurtos/arrebatos, sicariato, homicidios, asesinatos, balaceras/tiroteos, feminicidios, extorsiones/cobro de cupos/detonación de explosivos, secuestros, agresiones violentas en vía pública y desmantelamiento/captura de bandas criminales peligrosas ("búnker", organización criminal).
                 2. RECHAZO ABSOLUTO (devuelve {"incidents": []}):
+                   - Violencia familiar o intrafamiliar, maltrato psicológico, medidas de protección Ley 30364, discusiones de pareja o pensión de alimentos (EXCEPTO feminicidio o tentativa homicida armada).
+                   - Peleas o enfrentamientos entre barras bravas o hinchas de fútbol (barristas, Trinchera Norte, Comando Svr, Extremo Celeste, hinchas entre sí).
                    - Cualquier noticia de OTRO PAÍS (EE. UU., Nueva Jersey, China, Polonia, Cracovia, Colombia, Argentina, México, Venezuela, España, etc.).
                    - Cualquier noticia de OTRA PROVINCIA del Perú fuera de Lima Metropolitana y Callao (Jaén, Huaura, Huacho, Trujillo, Arequipa, Piura, Cusco, Ica, etc.).
                    - Casos de lavado de activos, incautación de mansiones o bienes de personajes públicos/farándula (Pronabi, Karla Casós, delitos financieros o de cuello blanco que no ocurren como asalto en la calle).
                    - Sentencias judiciales o condenas por hechos pasados, extradiciones, accidentes de tránsito, incendios fortuitos, rescates en el mar, notas de opinión o anuncios institucionales.
-                3. GEOLOCALIZACIÓN DE MÁXIMA PRECISIÓN EN TIERRA FIRME:
-                   - Extrae en "address_text" la vía, avenida, jirón, calle, cuadra, cruce, puente, estación, mercado o urbanización más exacta mencionada en el título o contenido.
+                3. VERIFICACIÓN CRUZADA MULTI-FUENTE Y GEOLOCALIZACIÓN EN TIERRA FIRME:
+                   - Si el contenido incluye bloques [FUENTE PRINCIPAL] y [FUENTE CORROBORADORA #N], cruza y fusiona todos los reportes porque corresponden al mismo suceso: toma la calle, cuadra, intersección ("Av. X con Av. Y") o punto más específico encontrado entre todas las fuentes sin generar incidentes duplicados.
+                   - Extrae en "address_text" la vía, avenida, jirón, calle, cuadra, cruce, puente, estación, mercado o urbanización más exacta.
                    - Extrae en "district" el nombre oficial del distrito de Lima Metropolitana o del Callao. Si el texto no menciona ningún lugar de Lima o Callao, devuelve {"incidents": []}.
-                   - Calcula en "approx_lat" y "approx_lng" las coordenadas GPS reales y precisas sobre TIERRA FIRME de la avenida o lugar exacto. Si el hecho ocurrió en la Costa Verde, San Miguel, Magdalena, Miraflores, Barranco, Chorrillos o Callao, coloca la coordenada exactamente sobre la vía terrestre o malecón, NUNCA sobre el mar.
-                4. Resuelve la fecha y hora exacta en que ocurrió el delito (occurred_at) usando published_at.
+                   - Calcula en "approx_lat" y "approx_lng" las coordenadas GPS reales y precisas sobre TIERRA FIRME de la vía exacta. Si el hecho ocurrió en la Costa Verde, San Miguel, Magdalena, Miraflores, Barranco, Chorrillos o Callao, coloca la coordenada exactamente sobre la vía terrestre o malecón, NUNCA sobre el mar.
+                4. HORA REAL EXACTA DEL HECHO (occurred_at):
+                   - Resuelve la fecha y hora exacta en horario de Perú (-05:00) en que ocurrió el delito cruzando frases temporales ("anoche a las 10:30 p. m.", "esta madrugada", "a las 15:40 horas", "hace 2 horas") respecto a published_at. No uses la hora de publicación de la nota si el texto indica cuándo ocurrió realmente el ataque, y marca occurred_at_precision = "EXACT" solo si se conoce la hora real.
                 5. Responde ÚNICAMENTE con JSON válido, sin bloques markdown ni texto adicional.
 
                 Esquema de salida:

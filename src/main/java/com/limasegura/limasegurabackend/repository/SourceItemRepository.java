@@ -22,6 +22,8 @@ public interface SourceItemRepository extends JpaRepository<SourceItem, Long> {
 
     Page<SourceItem> findByStatus(SourceItemStatus status, Pageable pageable);
 
+    long countByStatus(SourceItemStatus status);
+
     @Query("SELECT si FROM SourceItem si WHERE si.status = :status AND (si.nextAttemptAt IS NULL OR si.nextAttemptAt <= :now) AND si.attempts < :maxAttempts ORDER BY si.createdAt ASC")
     List<SourceItem> findRetryable(@Param("status") SourceItemStatus status, @Param("now") LocalDateTime now, @Param("maxAttempts") int maxAttempts);
 
@@ -31,6 +33,27 @@ public interface SourceItemRepository extends JpaRepository<SourceItem, Long> {
     @Query("SELECT si FROM SourceItem si JOIN FETCH si.newsSource WHERE si.status IN :statuses AND (si.nextAttemptAt IS NULL OR si.nextAttemptAt <= :now) AND si.attempts < :maxAttempts ORDER BY si.createdAt ASC")
     List<SourceItem> findByStatusInAndRetryable(@Param("statuses") List<SourceItemStatus> statuses, @Param("now") LocalDateTime now, @Param("maxAttempts") int maxAttempts);
 
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
     @Query("DELETE FROM SourceItem si WHERE si.status IN ('EXTRACTED', 'DISCARDED') AND si.createdAt < :before")
     void deleteContentTextOlderThan(@Param("before") LocalDateTime before);
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = "DELETE FROM source_items si WHERE si.status = 'DISCARDED' AND si.created_at < :before " +
+            "AND NOT EXISTS (SELECT 1 FROM incident_sources isrc WHERE isrc.source_item_id = si.id)",
+            nativeQuery = true)
+    int deleteDiscardedOlderThan(@Param("before") LocalDateTime before);
+
+    @org.springframework.transaction.annotation.Transactional
+    @org.springframework.data.jpa.repository.Modifying
+    @Query(value = "UPDATE source_items SET content_text = NULL WHERE status = 'EXTRACTED' AND content_text IS NOT NULL AND created_at < :before",
+            nativeQuery = true)
+    int pruneExtractedContentOlderThan(@Param("before") LocalDateTime before);
+
+    @Query("SELECT si FROM SourceItem si JOIN FETCH si.newsSource "
+            + "WHERE si.status IN ('CONTENT_READY', 'EXTRACTED') "
+            + "AND (si.publishedAt >= :since OR si.createdAt >= :since) "
+            + "ORDER BY COALESCE(si.publishedAt, si.createdAt) DESC")
+    List<SourceItem> findRecentForCorroboration(@Param("since") LocalDateTime since);
 }

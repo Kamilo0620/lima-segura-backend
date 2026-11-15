@@ -13,7 +13,9 @@ public class SseBroadcastListener {
 
     private final SseService sseService;
 
-    @EventListener
+    @org.springframework.transaction.event.TransactionalEventListener(
+            phase = org.springframework.transaction.event.TransactionPhase.AFTER_COMMIT,
+            fallbackExecution = true)
     public void onIncidentPublished(IncidentPublishedEvent event) {
         log.info("Broadcasting new incident {} via SSE", event.getIncidentId());
         sseService.broadcast(event.getIncidentId());

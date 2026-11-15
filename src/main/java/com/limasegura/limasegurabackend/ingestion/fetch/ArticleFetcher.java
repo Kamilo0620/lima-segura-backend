@@ -75,59 +75,19 @@ public class ArticleFetcher {
 
         try {
             // 2. Conectar simulando un navegador moderno con Referer de Google y cookies aceptadas para bypass de paywalls
-            Document doc = Jsoup.connect(item.getUrl())
-                    .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
-                    .referrer("https://www.google.com/")
-                    .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
-                    .header("Accept-Language", "es-PE,es;q=0.9,en;q=0.8")
-                    .header("Cache-Control", "no-cache")
-                    .cookie("cookie_consent", "true")
-                    .cookie("notice_preferences", "0")
-                    .cookie("arc_paywall", "false")
-                    .cookie("didomi_token", "1")
-                    .timeout(15000)
-                    .get();
+            Document doc = connectWithPaywallBypass(item.getUrl(), 15000);
 
-            String extractedBody = null;
-
-            // 3. CAPA 1 (Máxima fidelidad sin muros ni cookies): Extraer articleBody de JSON-LD Schema (Google SEO)
-            extractedBody = extractArticleBodyFromJsonLd(doc);
-
-            // 4. CAPA 2: Si no hay JSON-LD, limpiar agresivamente el DOM de paywalls y banners de cookies
-            if (extractedBody == null || extractedBody.length() < 100) {
-                cleanPaywallAndCookieElements(doc);
-
-                String titleSelector = "h1";
-                String bodySelector = "article";
-
-                if (source.getConfig() != null && !source.getConfig().isBlank()) {
-                    try {
-                        JsonNode configNode = objectMapper.readTree(source.getConfig());
-                        if (configNode.has("bodySelector")) bodySelector = configNode.get("bodySelector").asText();
-                        if (configNode.has("titleSelector")) titleSelector = configNode.get("titleSelector").asText();
-                    } catch (Exception ignored) {}
-                }
-
-                Elements bodyElements = doc.select(bodySelector);
-                if (bodyElements.isEmpty()) {
-                    bodyElements = doc.select("[itemprop='articleBody'], .story-content, .article-body, .news-body, main");
-                }
-
-                String title = doc.select(titleSelector).text();
-                String bodyText = bodyElements.text();
-
-                if (bodyText.length() > 100) {
-                    extractedBody = (title.isBlank() ? "" : title + "\n\n") + bodyText;
-                }
+            String titleSelector = "h1";
+            String bodySelector = "article";
+            if (source.getConfig() != null && !source.getConfig().isBlank()) {
+                try {
+                    JsonNode configNode = objectMapper.readTree(source.getConfig());
+                    if (configNode.has("bodySelector")) bodySelector = configNode.get("bodySelector").asText();
+                    if (configNode.has("titleSelector")) titleSelector = configNode.get("titleSelector").asText();
+                } catch (Exception ignored) {}
             }
 
-            // 5. CAPA 3: Fallback a meta-etiquetas OpenGraph si el HTML fue bloqueado por JavaScript
-            if (extractedBody == null || extractedBody.length() < 100) {
-                String ogDesc = doc.select("meta[property='og:description'], meta[name='description']").attr("content");
-                if (ogDesc != null && ogDesc.length() > 50) {
-                    extractedBody = item.getTitle() + "\n\n" + ogDesc;
-                }
-            }
+            String extractedBody = extractCleanArticleFromDocument(doc, titleSelector, bodySelector, item.getTitle());
 
             // 6. CAPA 4: Fallback al resumen RSS si el portal web bloqueó el acceso
             if ((extractedBody == null || extractedBody.length() < 100) && initialRssText != null && !initialRssText.isBlank()) {
@@ -167,6 +127,73 @@ public class ArticleFetcher {
                 sourceItemRepository.save(item);
             }
         }
+    }
+
+    /**
+     * Descarga y limpia el cuerpo de una URL externa para verificación cruzada entre medios,
+     * reutilizando la extracción JSON-LD y limpieza de paywalls. Devuelve null si falla o está vacío.
+     */
+    public String fetchCleanTextFromUrl(String url) {
+        if (url == null || !url.startsWith("http")) {
+            return null;
+        }
+        try {
+            Document doc = connectWithPaywallBypass(url, 5500);
+            String title = doc.title();
+            String body = extractCleanArticleFromDocument(doc, "h1", "article", title);
+            if (body == null || body.isBlank()) {
+                return null;
+            }
+            String sanitized = sanitizeText(body);
+            if (sanitized.length() > 8000) {
+                sanitized = sanitized.substring(0, 8000);
+            }
+            return sanitized.length() >= 80 ? sanitized : null;
+        } catch (Exception e) {
+            log.debug("Cross-verification URL fetch skipped for {}: {}", url, e.getMessage());
+            return null;
+        }
+    }
+
+    private Document connectWithPaywallBypass(String url, int timeoutMs) throws Exception {
+        return Jsoup.connect(url)
+                .userAgent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+                .referrer("https://www.google.com/")
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8")
+                .header("Accept-Language", "es-PE,es;q=0.9,en;q=0.8")
+                .header("Cache-Control", "no-cache")
+                .cookie("cookie_consent", "true")
+                .cookie("notice_preferences", "0")
+                .cookie("arc_paywall", "false")
+                .cookie("didomi_token", "1")
+                .followRedirects(true)
+                .timeout(timeoutMs)
+                .get();
+    }
+
+    private String extractCleanArticleFromDocument(Document doc, String titleSelector, String bodySelector, String fallbackTitle) {
+        String extractedBody = extractArticleBodyFromJsonLd(doc);
+
+        if (extractedBody == null || extractedBody.length() < 100) {
+            cleanPaywallAndCookieElements(doc);
+            Elements bodyElements = doc.select(bodySelector);
+            if (bodyElements.isEmpty()) {
+                bodyElements = doc.select("[itemprop='articleBody'], .story-content, .article-body, .news-body, main");
+            }
+            String title = doc.select(titleSelector).text();
+            String bodyText = bodyElements.text();
+            if (bodyText.length() > 100) {
+                extractedBody = (title.isBlank() ? "" : title + "\n\n") + bodyText;
+            }
+        }
+
+        if (extractedBody == null || extractedBody.length() < 100) {
+            String ogDesc = doc.select("meta[property='og:description'], meta[name='description']").attr("content");
+            if (ogDesc != null && ogDesc.length() > 50) {
+                extractedBody = (fallbackTitle != null ? fallbackTitle : "") + "\n\n" + ogDesc;
+            }
+        }
+        return extractedBody;
     }
 
     String extractArticleBodyFromJsonLd(Document doc) {

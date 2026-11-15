@@ -70,6 +70,11 @@ public class DistrictResolver {
 
         ALIAS_TO_CANONICAL.put("surco", "Santiago de Surco");
         ALIAS_TO_CANONICAL.put("monterrico", "Santiago de Surco");
+        ALIAS_TO_CANONICAL.put("el derby", "Santiago de Surco");
+        ALIAS_TO_CANONICAL.put("av el derby", "Santiago de Surco");
+        ALIAS_TO_CANONICAL.put("jockey plaza", "Santiago de Surco");
+        ALIAS_TO_CANONICAL.put("ovalo higuereta", "Santiago de Surco");
+        ALIAS_TO_CANONICAL.put("av espana", "Lima");
 
         ALIAS_TO_CANONICAL.put("chosica", "Lurigancho");
         ALIAS_TO_CANONICAL.put("lurigancho chosica", "Lurigancho");
@@ -99,7 +104,8 @@ public class DistrictResolver {
         ALIAS_TO_CANONICAL.put("barracones", "Callao");
         ALIAS_TO_CANONICAL.put("marquez", "Callao");
         ALIAS_TO_CANONICAL.put("minka", "Callao");
-        ALIAS_TO_CANONICAL.put("pachacutec", "Ventanilla");
+        ALIAS_TO_CANONICAL.put("ciudad pachacutec", "Ventanilla");
+        ALIAS_TO_CANONICAL.put("proyecto pachacutec", "Ventanilla");
     }
 
     public District resolveFromText(String text) {
@@ -107,16 +113,46 @@ public class DistrictResolver {
         String normText = normalize(text);
         List<District> candidates = districtRepository.findAll();
 
-        // 1. Buscar nombres exactos de distritos (ordenados por longitud descendente para priorizar "San Juan de Lurigancho" sobre "Lurigancho" o "Lima")
+        // 1. Buscar nombres exactos de distritos (ordenados por longitud descendente para priorizar "San Juan de Lurigancho" sobre "Lurigancho")
         candidates.sort((a, b) -> Integer.compare(b.getName().length(), a.getName().length()));
+
+        // Mascarar matches ya asignados evita que "Lurigancho" haga match dentro de "San Juan de Lurigancho",
+        // y priorizar posición temprana protege la jurisdicción del titular frente a menciones secundarias del cuerpo.
+        StringBuilder maskedText = new StringBuilder(normText);
+        District bestMatch = null;
+        int bestPos = Integer.MAX_VALUE;
+        boolean explicitSantaRosa = normText.contains("distrito de santa rosa")
+                || normText.contains("balneario de santa rosa")
+                || normText.contains("balneario santa rosa");
+
         for (District d : candidates) {
             if ("Lima".equalsIgnoreCase(d.getName())) {
                 continue; // Evitar que cualquier mención genérica a "Lima" se asigne antes de revisar barrios/aliases
             }
             String normDistrict = normalize(d.getName());
-            if (Pattern.compile("(?<![a-z0-9])" + Pattern.quote(normDistrict) + "(?![a-z0-9])").matcher(normText).find()) {
-                return d;
+            java.util.regex.Matcher m = Pattern.compile("(?<![a-z0-9])" + Pattern.quote(normDistrict) + "(?![a-z0-9])")
+                    .matcher(maskedText);
+            while (m.find()) {
+                int start = m.start();
+                if ("santa rosa".equals(normDistrict) && !explicitSantaRosa) {
+                    String prefix = normText.substring(Math.max(0, start - 28), start);
+                    if (prefix.matches(".*\\b(?:av|avenida|jr|jiron|ca|calle|hospital|clinica|urb|urbanizacion|ovalo|parque|colegio|mercado|puente|comisaria|fiesta\\s+por)\\s*$")) {
+                        continue;
+                    }
+                }
+                for (int idx = start; idx < m.end(); idx++) {
+                    maskedText.setCharAt(idx, ' ');
+                }
+                int rankPos = ("santa rosa".equals(normDistrict) && !explicitSantaRosa) ? start + 100_000 : start;
+                if (rankPos < bestPos) {
+                    bestPos = rankPos;
+                    bestMatch = d;
+                }
+                break;
             }
+        }
+        if (bestMatch != null) {
+            return bestMatch;
         }
 
         // 2. Buscar por alias de zonas/barrios/avenidas emblemáticas de Lima y Callao

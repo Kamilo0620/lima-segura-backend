@@ -41,7 +41,7 @@ public class IncidentController {
             @RequestParam(required = false) IncidentOrigin origin,
             @RequestParam(required = false) IncidentStatus status,
             @RequestParam(required = false) String search,
-            @PageableDefault(size = 20) Pageable pageable) {
+            @PageableDefault(size = 20, sort = {"occurredAt", "id"}, direction = org.springframework.data.domain.Sort.Direction.DESC) Pageable pageable) {
         return ResponseEntity.ok(incidentService.findFiltered(type, from, to, district, status, origin, search, pageable));
     }
 
