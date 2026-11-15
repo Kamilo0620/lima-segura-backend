@@ -1,6 +1,7 @@
 package com.limasegura.limasegurabackend.repository;
 
 import com.limasegura.limasegurabackend.model.Incident;
+import com.limasegura.limasegurabackend.model.IncidentOrigin;
 import com.limasegura.limasegurabackend.model.IncidentStatus;
 import com.limasegura.limasegurabackend.model.IncidentType;
 import org.springframework.data.domain.Page;
@@ -37,6 +38,16 @@ public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSp
 
     Page<Incident> findByStatus(IncidentStatus status, Pageable pageable);
 
+    long countByStatus(IncidentStatus status);
+
+    long countByStatusAndOrigin(IncidentStatus status, IncidentOrigin origin);
+
+    @Query("SELECT i FROM Incident i LEFT JOIN FETCH i.district WHERE i.status = 'PUBLISHED'")
+    List<Incident> findAllPublishedWithDistrict();
+
+    @EntityGraph(attributePaths = {"district"})
+    List<Incident> findTop10ByStatusOrderByIdDesc(IncidentStatus status);
+
     @Query("SELECT i FROM Incident i WHERE " +
            "(:type IS NULL OR i.incidentType = :type) AND " +
            "(:from IS NULL OR i.occurredAt >= :from) AND " +
@@ -63,7 +74,26 @@ public interface IncidentRepository extends JpaRepository<Incident, Long>, JpaSp
         @Param("from") LocalDateTime from,
         @Param("to") LocalDateTime to);
 
+    @Query("SELECT i FROM Incident i WHERE i.status = 'PUBLISHED' AND " +
+           "i.district.ubigeo = :districtUbigeo AND " +
+           "i.occurredAt BETWEEN :from AND :to")
+    List<Incident> findDuplicateCandidatesWithinWindow(
+        @Param("districtUbigeo") String districtUbigeo,
+        @Param("from") LocalDateTime from,
+        @Param("to") LocalDateTime to);
+
+    @Query("SELECT i FROM Incident i " +
+           "WHERE i.status = 'PUBLISHED' AND i.origin IN ('NEWSPAPER', 'YOUTUBE') " +
+           "AND COALESCE(i.occurredAt, i.createdAt) >= :since " +
+           "AND (i.geoPrecision = 'DISTRICT' OR i.occurredAtPrecision IS NULL OR i.occurredAtPrecision <> 'EXACT') " +
+           "ORDER BY COALESCE(i.occurredAt, i.createdAt) DESC")
+    List<Incident> findRecentNeedingRefinement(@Param("since") LocalDateTime since);
+
+    @Query("SELECT i FROM Incident i LEFT JOIN FETCH i.district WHERE i.origin = :origin ORDER BY i.occurredAt DESC")
+    List<Incident> findByOriginWithDistrict(@Param("origin") com.limasegura.limasegurabackend.model.IncidentOrigin origin, Pageable pageable);
+
     @Query("SELECT DISTINCT i FROM Incident i " +
+           "LEFT JOIN FETCH i.district d " +
            "LEFT JOIN FETCH i.sourceItems si " +
            "LEFT JOIN FETCH si.newsSource ns " +
            "WHERE i.status = 'PUBLISHED' " +

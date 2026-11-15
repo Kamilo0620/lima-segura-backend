@@ -14,6 +14,10 @@ import java.util.List;
 public class DatasetImportResult {
     private Integer totalRows;
     private Integer importedRows;
+    private Integer filteredOutRows;
     private Integer errorRows;
+    private Integer importedCount;
+    private Integer skippedCount;
+    private String message;
     private List<String> errors;
 }

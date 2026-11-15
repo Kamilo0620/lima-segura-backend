@@ -10,10 +10,13 @@ import com.limasegura.limasegurabackend.ingestion.dedup.IncidentDeduplicationSer
 import com.limasegura.limasegurabackend.ingestion.filter.TitleRelevanceFilter;
 import com.limasegura.limasegurabackend.ingestion.geo.DistrictResolver;
 import com.limasegura.limasegurabackend.ingestion.geo.GeocodingService;
+import com.limasegura.limasegurabackend.ingestion.telemetry.PipelineActivityTracker;
+import com.limasegura.limasegurabackend.ingestion.verify.CrossVerificationService;
+import com.limasegura.limasegurabackend.ingestion.verify.ExactEventParser;
 import com.limasegura.limasegurabackend.model.*;
 import com.limasegura.limasegurabackend.repository.SourceItemRepository;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -27,7 +30,6 @@ import java.util.Locale;
 
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class IncidentExtractionService {
 
     private final SourceItemRepository sourceItemRepository;
@@ -40,7 +42,57 @@ public class IncidentExtractionService {
     private final DistrictResolver districtResolver;
     private final IncidentDeduplicationService deduplicationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final CrossVerificationService crossVerificationService;
+    private final ExactEventParser exactEventParser;
     private final TitleRelevanceFilter titleRelevanceFilter = new TitleRelevanceFilter();
+
+    @Autowired(required = false)
+    private PipelineActivityTracker activityTracker;
+
+    @Autowired
+    public IncidentExtractionService(
+            SourceItemRepository sourceItemRepository,
+            IngestionConfig ingestionConfig,
+            LlmConfig llmConfig,
+            LlmClient llmClient,
+            PromptFactory promptFactory,
+            ObjectMapper objectMapper,
+            GeocodingService geocodingService,
+            DistrictResolver districtResolver,
+            IncidentDeduplicationService deduplicationService,
+            ApplicationEventPublisher eventPublisher,
+            CrossVerificationService crossVerificationService,
+            ExactEventParser exactEventParser
+    ) {
+        this.sourceItemRepository = sourceItemRepository;
+        this.ingestionConfig = ingestionConfig;
+        this.llmConfig = llmConfig;
+        this.llmClient = llmClient;
+        this.promptFactory = promptFactory;
+        this.objectMapper = objectMapper;
+        this.geocodingService = geocodingService;
+        this.districtResolver = districtResolver;
+        this.deduplicationService = deduplicationService;
+        this.eventPublisher = eventPublisher;
+        this.crossVerificationService = crossVerificationService;
+        this.exactEventParser = exactEventParser != null ? exactEventParser : new ExactEventParser();
+    }
+
+    public IncidentExtractionService(
+            SourceItemRepository sourceItemRepository,
+            IngestionConfig ingestionConfig,
+            LlmConfig llmConfig,
+            LlmClient llmClient,
+            PromptFactory promptFactory,
+            ObjectMapper objectMapper,
+            GeocodingService geocodingService,
+            DistrictResolver districtResolver,
+            IncidentDeduplicationService deduplicationService,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this(sourceItemRepository, ingestionConfig, llmConfig, llmClient, promptFactory, objectMapper,
+                geocodingService, districtResolver, deduplicationService, eventPublisher, null, new ExactEventParser());
+    }
 
     @Transactional
     public void extractIncidents(Long sourceItemId) {
@@ -69,12 +121,18 @@ public class IncidentExtractionService {
             return;
         }
 
+        // 0.5 Verificación cruzada autónoma multi-fuente (corpus local + Google/Bing News PE)
+        CrossVerificationService.VerificationDossier dossier = crossVerificationService != null
+                ? crossVerificationService.verifyAndFuse(item, rawTitle, contentText, item.getPublishedAt(), null)
+                : null;
+        String narrativeForLlm = dossier != null ? dossier.fusedNarrativeText() : contentText;
+
         try {
             String systemPrompt = promptFactory.buildExtractionPrompt();
             String publishedAtStr = item.getPublishedAt() != null
                     ? item.getPublishedAt().toString()
-                    : LocalDateTime.now().toString();
-            String userMessage = promptFactory.buildUserMessage(rawTitle, contentText, publishedAtStr);
+                    : LocalDateTime.now(ExactEventParser.LIMA_ZONE).toString();
+            String userMessage = promptFactory.buildUserMessage(rawTitle, narrativeForLlm, publishedAtStr);
 
             String llmResponse = llmClient.chat(systemPrompt, userMessage);
             LlmExtractionResponse extractionResponse;
@@ -99,12 +157,20 @@ public class IncidentExtractionService {
 
             int publishedCount = 0;
             for (LlmIncidentDto dto : extractionResponse.getIncidents()) {
-                if (isOutsideLimaAndCallao(dto)
-                        || !titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(
-                                dto.getTitle() != null ? dto.getTitle() : rawTitle,
-                                dto.getSummary(),
-                                item.getUrl())) {
+                String dtoTitle = dto.getTitle() != null ? dto.getTitle() : rawTitle;
+                boolean excluded = isOutsideLimaAndCallao(dto)
+                        || titleRelevanceFilter.isExcludedCrimeCategory(dtoTitle, dto.getSummary());
+                boolean relevantDto = !excluded
+                        && (titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(dtoTitle, dto.getSummary(), item.getUrl())
+                            || (isStreetCrimeType(dto.getIncident_type())
+                                && titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(rawTitle, dto.getSummary(), item.getUrl())));
+                if (!relevantDto) {
                     log.info("Skipping non-Lima/Callao or non-street-crime DTO from source item {}: '{}'", sourceItemId, dto.getTitle());
+                    if (activityTracker != null) {
+                        activityTracker.record("FILTER_SKIP", "WARN",
+                                item.getNewsSource() != null ? item.getNewsSource().getName() : "Extracción",
+                                "Descartado DTO no elegible: " + dtoTitle);
+                    }
                     continue;
                 }
 
@@ -116,10 +182,13 @@ public class IncidentExtractionService {
 
                 // Descartar noticias antiguas (> 14 días de antigüedad respecto a la fecha actual)
                 if (incident.getOccurredAt() != null
-                        && java.time.Duration.between(incident.getOccurredAt(), LocalDateTime.now()).toDays() > 14) {
+                        && java.time.Duration.between(incident.getOccurredAt(), LocalDateTime.now(ExactEventParser.LIMA_ZONE)).toDays() > 14) {
                     log.info("Skipping old incident (>14 days) from source item {}: '{}'", sourceItemId, incident.getTitle());
                     continue;
                 }
+
+                // Aplicar calle exacta y hora exacta determinadas por verificación cruzada cuando Gemini dejó datos genéricos
+                applyCrossVerifiedRefinements(incident, dossier);
 
                 Double llmLat = dto.getLocation() != null ? dto.getLocation().getApprox_lat() : null;
                 Double llmLng = dto.getLocation() != null ? dto.getLocation().getApprox_lng() : null;
@@ -128,7 +197,10 @@ public class IncidentExtractionService {
 
                 if (incident.getConfidence() >= ingestionConfig.getMinConfidence()
                         && incident.getGeoPrecision() != null
-                        && (incident.getGeoPrecision() == GeoPrecision.ADDRESS || incident.getGeoPrecision() == GeoPrecision.DISTRICT)) {
+                        && (incident.getGeoPrecision() == GeoPrecision.ADDRESS
+                            || incident.getGeoPrecision() == GeoPrecision.EXACT_ADDRESS
+                            || incident.getGeoPrecision() == GeoPrecision.INTERSECTION
+                            || incident.getGeoPrecision() == GeoPrecision.DISTRICT)) {
                     incident.setStatus(IncidentStatus.PUBLISHED);
                 } else {
                     incident.setStatus(IncidentStatus.PENDING_REVIEW);
@@ -138,9 +210,16 @@ public class IncidentExtractionService {
                 if (incident.getStatus() == IncidentStatus.PUBLISHED && saved.getStatus() != IncidentStatus.PUBLISHED) {
                     saved.setStatus(IncidentStatus.PUBLISHED);
                 }
+                attachCorroborationsToSaved(saved, dossier);
 
                 publishedCount++;
                 eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
+                if (activityTracker != null) {
+                    String srcName = item.getNewsSource() != null ? item.getNewsSource().getName() : "Prensa/TV";
+                    String distName = saved.getDistrict() != null ? saved.getDistrict().getName() : "Lima/Callao";
+                    activityTracker.record("PUBLISHED", "INFO", srcName,
+                            "Publicado #" + saved.getId() + " (" + distName + "): " + saved.getTitle());
+                }
             }
 
             item.setStatus(publishedCount > 0 ? SourceItemStatus.EXTRACTED : SourceItemStatus.DISCARDED);
@@ -149,26 +228,32 @@ public class IncidentExtractionService {
         } catch (Exception e) {
             log.warn("LLM quota/connection limit on pre-verified crime item {} ({}), applying strict Lima/Callao crime extractor: {}",
                     sourceItemId, e.getClass().getSimpleName(), e.getMessage());
-            extractVerifiedCrimeOnQuotaLimit(item, contentText);
+            extractVerifiedCrimeOnQuotaLimit(item, contentText, dossier);
         }
     }
 
-    private void extractVerifiedCrimeOnQuotaLimit(SourceItem item, String contentText) {
+    private void extractVerifiedCrimeOnQuotaLimit(
+            SourceItem item,
+            String contentText,
+            CrossVerificationService.VerificationDossier dossier
+    ) {
         String title = TitleRelevanceFilter.decodeHtmlEntities(item.getTitle() != null ? item.getTitle().trim() : "");
         String cleanContent = TitleRelevanceFilter.decodeHtmlEntities(contentText != null ? contentText.trim() : "");
-        String combined = (title + " " + cleanContent).trim();
+        String fusedText = dossier != null && dossier.fusedNarrativeText() != null
+                ? dossier.fusedNarrativeText()
+                : cleanContent;
+        String combined = (title + " " + fusedText).trim();
 
-        if (!titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(title, cleanContent, item.getUrl())) {
+        if (!titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(title, fusedText, item.getUrl())) {
             item.setStatus(SourceItemStatus.DISCARDED);
             sourceItemRepository.save(item);
             return;
         }
 
         // EXIGIR OBLIGATORIAMENTE que el título o el texto mencione un distrito o lugar real de Lima o Callao.
-        // NUNCA inventar "Sector urbano de Lima" si la noticia no menciona explícitamente un distrito de Lima/Callao.
         District district = districtResolver.resolveFromText(title);
         if (district == null) {
-            district = districtResolver.resolveFromText(cleanContent);
+            district = districtResolver.resolveFromText(fusedText);
         }
         if (district == null && explicitlyMentionsLimaCercado(combined)) {
             district = districtResolver.resolve("Lima", "Lima", "Lima");
@@ -192,13 +277,15 @@ public class IncidentExtractionService {
             type = IncidentType.EXTORTION;
         } else if (lower.contains("secuestr") || lower.contains("raptan")) {
             type = IncidentType.KIDNAPPING;
+        } else if (lower.contains("desmantel") || lower.contains("desarticul") || lower.contains("organizacion criminal") || lower.contains("banda criminal")) {
+            type = IncidentType.ARMED_ROBBERY;
         } else if (lower.contains("robo de veh") || lower.contains("camioneta") || lower.contains("autoparte")) {
             type = IncidentType.VEHICLE_THEFT;
         } else if (lower.contains("mano armada") || lower.contains("encañon") || lower.contains("arma de fuego")) {
             type = IncidentType.ARMED_ROBBERY;
         } else if (lower.contains("hurto") || lower.contains("arrebato")) {
             type = IncidentType.THEFT;
-        } else if (lower.contains("agresi") || lower.contains("barristas") || lower.contains("irrumpen")) {
+        } else if (lower.contains("agresi") || lower.contains("irrumpen")) {
             type = IncidentType.ASSAULT;
         }
 
@@ -224,30 +311,38 @@ public class IncidentExtractionService {
                 : IncidentOrigin.NEWSPAPER);
         incident.setTitle(title.length() > 200 ? title.substring(0, 200) : title);
         incident.setSummary(detailedSummary);
-        incident.setConfidence(0.88);
-        incident.setLlmModel("gemini-3.5-flash");
+        double baseConf = dossier != null && !dossier.corroboratedSources().isEmpty() ? 0.90 : 0.80;
+        incident.setConfidence(baseConf);
+        incident.setLlmModel("deterministic-cross-verified-extractor");
         incident.setEvidenceExcerpt(cleanBody.length() > 20
                 ? cleanBody.substring(0, Math.min(cleanBody.length(), 195))
                 : title);
         incident.setVictimsCount(1);
         incident.setIncidentCount(1);
 
-        long offsetMinutes = 12 + (Math.abs(title.hashCode()) % 95);
-        LocalDateTime now = LocalDateTime.now();
-        LocalDateTime baseEventTime = (item.getPublishedAt() != null && !item.getPublishedAt().isAfter(now))
-                ? item.getPublishedAt().minusMinutes(15)
-                : now.minusMinutes(offsetMinutes);
-        incident.setOccurredAt(baseEventTime);
-        incident.setOccurredAtPrecision(OccurredAtPrecision.EXACT);
+        ExactEventParser.ResolvedEventTime resolvedTime = dossier != null && dossier.resolvedEventTime() != null
+                ? dossier.resolvedEventTime()
+                : exactEventParser.resolveExactOccurredAt(combined, item.getPublishedAt());
+        incident.setOccurredAt(resolvedTime.occurredAt());
+        incident.setOccurredAtPrecision(resolvedTime.exactHourFound()
+                ? OccurredAtPrecision.EXACT
+                : OccurredAtPrecision.APPROXIMATE);
+
         incident.setDistrict(district);
-        incident.setAddress("Jurisdicción de " + district.getName());
+        String exactStreet = dossier != null && dossier.suggestedExactAddress() != null
+                ? dossier.suggestedExactAddress()
+                : exactEventParser.extractExactStreetAddress(combined);
+        incident.setAddress(exactStreet != null && !exactStreet.isBlank()
+                ? exactStreet
+                : "Jurisdicción de " + district.getName());
         incident.setSourceItems(new HashSet<>());
 
-        geocodingService.geocodeIncident(incident, null, null, title);
+        geocodingService.geocodeIncident(incident, null, null, exactStreet != null ? exactStreet : title);
         incident.setStatus(IncidentStatus.PUBLISHED);
 
         Incident saved = deduplicationService.deduplicateOrCreate(incident, item);
         saved.setStatus(IncidentStatus.PUBLISHED);
+        attachCorroborationsToSaved(saved, dossier);
 
         item.setStatus(SourceItemStatus.EXTRACTED);
         item.setError(null);
@@ -256,6 +351,44 @@ public class IncidentExtractionService {
         eventPublisher.publishEvent(new IncidentPublishedEvent(this, saved.getId()));
         log.info("Extracted & published verified Lima/Callao crime incident '{}' in district '{}'",
                 saved.getTitle(), district.getName());
+    }
+
+    private void applyCrossVerifiedRefinements(Incident incident, CrossVerificationService.VerificationDossier dossier) {
+        if (dossier == null) {
+            return;
+        }
+        String suggestedAddress = dossier.suggestedExactAddress();
+        if (suggestedAddress != null && !suggestedAddress.isBlank()) {
+            boolean currentIsWeak = incident.getAddress() == null
+                    || incident.getAddress().isBlank()
+                    || !exactEventParser.hasSpecificStreetDetail(incident.getAddress());
+            if (currentIsWeak && exactEventParser.hasSpecificStreetDetail(suggestedAddress)) {
+                incident.setAddress(suggestedAddress);
+            } else if (incident.getAddress() == null || incident.getAddress().isBlank()) {
+                incident.setAddress(suggestedAddress);
+            }
+        }
+
+        if (dossier.resolvedEventTime() != null && dossier.resolvedEventTime().exactHourFound()
+                && incident.getOccurredAtPrecision() != OccurredAtPrecision.EXACT) {
+            incident.setOccurredAt(dossier.resolvedEventTime().occurredAt());
+            incident.setOccurredAtPrecision(OccurredAtPrecision.EXACT);
+        }
+
+        if (!dossier.corroboratedSources().isEmpty()) {
+            incident.setConfidence(Math.min(1.0, incident.getConfidence() + 0.05 * dossier.corroboratedSources().size()));
+        }
+    }
+
+    private void attachCorroborationsToSaved(Incident saved, CrossVerificationService.VerificationDossier dossier) {
+        if (crossVerificationService == null || dossier == null || dossier.corroboratedSources().isEmpty()) {
+            return;
+        }
+        int added = crossVerificationService.attachCorroboratingSources(saved, dossier.corroboratedSources());
+        if (added > 0) {
+            saved.setIncidentCount(Math.max(saved.getIncidentCount(), saved.getSourceItems().size()));
+            saved.setConfidence(Math.min(1.0, saved.getConfidence() + 0.04 * added));
+        }
     }
 
     private boolean explicitlyMentionsLimaCercado(String text) {
@@ -346,6 +479,16 @@ public class IncidentExtractionService {
         return incident;
     }
 
+    private boolean isStreetCrimeType(String rawType) {
+        if (rawType == null) return false;
+        return switch (rawType.trim().toUpperCase(Locale.ROOT)) {
+            case "ROBBERY", "ARMED_ROBBERY", "THEFT", "VEHICLE_THEFT",
+                 "EXTORTION", "HOMICIDE", "SHOOTING", "KIDNAPPING",
+                 "FEMICIDE", "ASSAULT", "VANDALISM" -> true;
+            default -> false;
+        };
+    }
+
     private boolean isOutsideLimaAndCallao(LlmIncidentDto dto) {
         StringBuilder sb = new StringBuilder();
         if (dto.getLocation() != null) {
@@ -355,10 +498,8 @@ public class IncidentExtractionService {
         }
         if (dto.getTitle() != null) sb.append(dto.getTitle()).append(" ");
         if (dto.getSummary() != null) sb.append(dto.getSummary()).append(" ");
-        return !titleRelevanceFilter.isRelevantLimaCallaoStreetCrime(
-                dto.getTitle() != null ? dto.getTitle() : sb.toString(),
-                sb.toString(),
-                "");
+        String combined = sb.toString();
+        return titleRelevanceFilter.isExcludedCrimeCategory(dto.getTitle(), combined);
     }
 
     private String cleanJsonResponse(String response) {

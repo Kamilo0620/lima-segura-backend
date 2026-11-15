@@ -79,13 +79,22 @@ public class RssNewsConnector implements SourceConnector {
 
                     LocalDateTime pubDate = null;
                     if (pubDateStr != null) {
+                        java.time.ZoneId limaZone = java.time.ZoneId.of("America/Lima");
                         try {
-                            pubDate = LocalDateTime.parse(pubDateStr, DateTimeFormatter.RFC_1123_DATE_TIME);
+                            pubDate = java.time.ZonedDateTime.parse(pubDateStr.trim(), DateTimeFormatter.RFC_1123_DATE_TIME)
+                                    .withZoneSameInstant(limaZone)
+                                    .toLocalDateTime();
                         } catch (DateTimeParseException e) {
                             try {
-                                pubDate = LocalDateTime.parse(pubDateStr, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                                pubDate = java.time.ZonedDateTime.parse(pubDateStr.trim(), DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                        .withZoneSameInstant(limaZone)
+                                        .toLocalDateTime();
                             } catch (DateTimeParseException ex) {
-                                log.debug("Failed to parse date: {}", pubDateStr);
+                                try {
+                                    pubDate = LocalDateTime.parse(pubDateStr.trim(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                                } catch (DateTimeParseException ex2) {
+                                    log.debug("Failed to parse date: {}", pubDateStr);
+                                }
                             }
                         }
                     }

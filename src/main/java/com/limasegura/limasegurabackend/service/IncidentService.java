@@ -144,6 +144,11 @@ public class IncidentService {
      *     24 a 48 horas:0.4 (Amarillo)
      *     > 48 horas:   0.1 (Decaimiento histórico)
      */
+    /**
+     * Calcula los puntos del mapa de calor con intensidad continua según hora exacta de ocurrencia:
+     * Intensidad = Gravedad_Delito (1..10) * Peso_Fuente (0.1..1.0) * Factor_Tiempo_Continuo (0.10..1.00) * Corroboracion
+     */
+    @Transactional(readOnly = true)
     public List<HeatmapPointResponse> getHeatmapPoints(LocalDateTime from, LocalDateTime to,
                                                        List<IncidentType> types, Double minConfidence) {
         Specification<Incident> spec = (root, query, cb) -> {
@@ -159,7 +164,7 @@ public class IncidentService {
             return cb.and(predicates.toArray(new Predicate[0]));
         };
         List<Incident> incidents = incidentRepository.findAll(spec);
-        LocalDateTime now = LocalDateTime.now();
+        LocalDateTime now = LocalDateTime.now(com.limasegura.limasegurabackend.ingestion.verify.ExactEventParser.LIMA_ZONE);
 
         return incidents.stream()
                 .map(i -> {
@@ -167,6 +172,9 @@ public class IncidentService {
                     int gravedad = i.getIncidentType() != null ? i.getIncidentType().getSeverity() : 5;
 
                     // 2. Peso de la Fuente = Credibilidad / 10
+                    int sourceCount = i.getSourceItems() != null && !i.getSourceItems().isEmpty()
+                            ? i.getSourceItems().size()
+                            : Math.max(1, i.getIncidentCount() != null ? i.getIncidentCount() : 1);
                     double pesoFuente = 0.8;
                     if (i.getSourceItems() != null && !i.getSourceItems().isEmpty()) {
                         pesoFuente = i.getSourceItems().stream()
@@ -178,43 +186,86 @@ public class IncidentService {
                         pesoFuente = i.getConfidence();
                     }
 
-                    // 3. Factor Tiempo según antigüedad
+                    // 3. Factor de tiempo continuo basado en los minutos exactos desde occurredAt
                     LocalDateTime time = i.getOccurredAt() != null ? i.getOccurredAt() : i.getCreatedAt();
-                    long hours = Duration.between(time, now).abs().toHours();
-                    double factorTiempo;
-                    String colorHint;
+                    long elapsedMinutes = time != null ? Math.max(0L, Duration.between(time, now).toMinutes()) : 2880L;
+                    double factorTiempo = computeContinuousTimeFactor(elapsedMinutes);
 
-                    if (hours <= 6) {
-                        factorTiempo = 1.0;
-                        colorHint = "red";
-                    } else if (hours <= 24) {
-                        factorTiempo = 0.7;
-                        colorHint = "orange";
-                    } else if (hours <= 48) {
-                        factorTiempo = 0.4;
-                        colorHint = "yellow";
-                    } else {
-                        factorTiempo = 0.1;
-                        colorHint = "gray";
-                    }
+                    // 4. Multiplicador por corroboración multi-medio y conteo reportado
+                    int corroborationUnits = Math.max(sourceCount, i.getIncidentCount() != null ? i.getIncidentCount() : 1);
+                    double corroborationBoost = 1.0 + Math.min(0.45, Math.max(0, corroborationUnits - 1) * 0.15);
 
-                    // Intensidad = Gravedad_Delito * Peso_Fuente * Factor_Tiempo
-                    double intensidad = gravedad * pesoFuente * factorTiempo * Math.max(1, i.getIncidentCount());
+                    // Intensidad final = Gravedad * Peso_Fuente * Factor_Tiempo * Corroboracion
+                    double intensidad = gravedad * pesoFuente * factorTiempo * corroborationBoost;
+                    String colorHint = resolveColorHint(elapsedMinutes);
+                    String colorHex = resolveGraduatedHex(gravedad, factorTiempo, elapsedMinutes);
+
+                    District dist = i.getDistrict();
 
                     return HeatmapPointResponse.builder()
                             .lat(i.getLat())
                             .lng(i.getLng())
                             .weight(Math.round(intensidad * 100.0) / 100.0)
                             .colorHint(colorHint)
+                            .colorHex(colorHex)
                             .severity(gravedad)
                             .sourceWeight(Math.round(pesoFuente * 100.0) / 100.0)
-                            .timeFactor(factorTiempo)
+                            .timeFactor(Math.round(factorTiempo * 1000.0) / 1000.0)
+                            .corroborationCount(corroborationUnits)
                             .incidentId(i.getId())
                             .incidentType(i.getIncidentType() != null ? i.getIncidentType().name() : "OTHER")
                             .title(i.getTitle())
+                            .districtName(dist != null ? dist.getName() : null)
+                            .province(dist != null ? dist.getProvince() : null)
+                            .occurredAt(time)
                             .build();
                 })
                 .collect(Collectors.toList());
+    }
+
+    private double computeContinuousTimeFactor(long elapsedMinutes) {
+        if (elapsedMinutes <= 60) {
+            return 1.0;
+        }
+        if (elapsedMinutes <= 360) { // 1h - 6h: 1.00 -> 0.85
+            return 1.0 - (0.15 * (elapsedMinutes - 60) / 300.0);
+        }
+        if (elapsedMinutes <= 1440) { // 6h - 24h: 0.85 -> 0.55
+            return 0.85 - (0.30 * (elapsedMinutes - 360) / 1080.0);
+        }
+        if (elapsedMinutes <= 2880) { // 24h - 48h: 0.55 -> 0.30
+            return 0.55 - (0.25 * (elapsedMinutes - 1440) / 1440.0);
+        }
+        if (elapsedMinutes <= 4320) { // 48h - 72h: 0.30 -> 0.14
+            return 0.30 - (0.16 * (elapsedMinutes - 2880) / 1440.0);
+        }
+        return 0.10;
+    }
+
+    private String resolveColorHint(long elapsedMinutes) {
+        long hours = elapsedMinutes / 60;
+        if (hours <= 6) return "red";
+        if (hours <= 24) return "orange";
+        if (hours <= 48) return "yellow";
+        return "gray";
+    }
+
+    /**
+     * Selecciona la tonalidad exacta entre amarillo, naranja y rojo combinando recencia exacta y gravedad del delito.
+     */
+    private String resolveGraduatedHex(int severity, double timeFactor, long elapsedMinutes) {
+        double severityNorm = Math.min(1.0, Math.max(0.0, severity / 10.0));
+        double score = 0.65 * timeFactor + 0.35 * severityNorm;
+        if (elapsedMinutes > 4320 && score < 0.32) {
+            return "#fde047"; // Amarillo tenue para histórico
+        }
+        if (score >= 0.88) return "#dc2626"; // Rojo carmesí crítico (muy reciente + grave)
+        if (score >= 0.78) return "#ef4444"; // Rojo vivo
+        if (score >= 0.68) return "#f97316"; // Naranja rojizo intenso
+        if (score >= 0.56) return "#fb923c"; // Naranja medio
+        if (score >= 0.44) return "#f59e0b"; // Ámbar naranja
+        if (score >= 0.32) return "#eab308"; // Amarillo dorado
+        return "#facc15";                    // Amarillo claro
     }
 
     public Page<IncidentResponse> findByStatus(IncidentStatus status, Pageable pageable) {
@@ -246,14 +297,17 @@ public class IncidentService {
      */
     @Transactional(readOnly = true)
     public DashboardStatsResponse getDashboardStats() {
-        List<Incident> published = incidentRepository.findAll().stream()
-                .filter(i -> i.getStatus() == IncidentStatus.PUBLISHED)
-                .toList();
+        List<Incident> published = incidentRepository.findAllPublishedWithDistrict();
         long total = published.size();
 
-        // 1. Por hora del día (0..23)
+        // 1. Por hora del día (0..23): priorizar horas verificadas (EXACT) para evitar sesgos de respaldo RSS
         long[] perHour = new long[24];
-        published.stream()
+        List<Incident> exactTimed = published.stream()
+                .filter(i -> i.getOccurredAt() != null
+                        && i.getOccurredAtPrecision() == com.limasegura.limasegurabackend.model.OccurredAtPrecision.EXACT)
+                .toList();
+        List<Incident> hourlyPool = exactTimed.size() >= 10 ? exactTimed : published;
+        hourlyPool.stream()
                 .map(Incident::getOccurredAt)
                 .filter(Objects::nonNull)
                 .forEach(t -> perHour[t.getHour()]++);
