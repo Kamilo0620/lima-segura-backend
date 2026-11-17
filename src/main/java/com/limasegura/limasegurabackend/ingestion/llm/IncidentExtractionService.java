@@ -310,12 +310,17 @@ public class IncidentExtractionService {
         LocalDateTime now = LocalDateTime.now();
         if (dto.getOccurred_at() != null && !dto.getOccurred_at().isBlank()) {
             try {
+                // Se guarda en UTC, igual que el resto de fechas del sistema (LocalDateTime.now() del servidor).
                 OffsetDateTime odt = OffsetDateTime.parse(dto.getOccurred_at());
-                LocalDateTime parsed = odt.toLocalDateTime();
+                LocalDateTime parsed = odt.withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime();
                 incident.setOccurredAt(parsed.isAfter(now) ? now.minusMinutes(15) : parsed);
             } catch (Exception e1) {
                 try {
-                    LocalDateTime parsed = LocalDateTime.parse(dto.getOccurred_at(), DateTimeFormatter.ISO_LOCAL_DATE_TIME);
+                    // Sin zona horaria: la IA da la hora de Lima; se convierte a UTC.
+                    LocalDateTime parsed = LocalDateTime.parse(dto.getOccurred_at(), DateTimeFormatter.ISO_LOCAL_DATE_TIME)
+                            .atZone(java.time.ZoneId.of("America/Lima"))
+                            .withZoneSameInstant(java.time.ZoneOffset.UTC)
+                            .toLocalDateTime();
                     incident.setOccurredAt(parsed.isAfter(now) ? now.minusMinutes(15) : parsed);
                 } catch (Exception e2) {
                     incident.setOccurredAt(item.getPublishedAt() != null && !item.getPublishedAt().isAfter(now)
