@@ -80,10 +80,12 @@ public class RssNewsConnector implements SourceConnector {
                     LocalDateTime pubDate = null;
                     if (pubDateStr != null) {
                         try {
-                            pubDate = LocalDateTime.parse(pubDateStr, DateTimeFormatter.RFC_1123_DATE_TIME);
+                            pubDate = java.time.ZonedDateTime.parse(pubDateStr.trim(), DateTimeFormatter.RFC_1123_DATE_TIME)
+                                    .withZoneSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime();
                         } catch (DateTimeParseException e) {
                             try {
-                                pubDate = LocalDateTime.parse(pubDateStr, DateTimeFormatter.ISO_OFFSET_DATE_TIME);
+                                pubDate = java.time.OffsetDateTime.parse(pubDateStr.trim(), DateTimeFormatter.ISO_OFFSET_DATE_TIME)
+                                        .withOffsetSameInstant(java.time.ZoneOffset.UTC).toLocalDateTime();
                             } catch (DateTimeParseException ex) {
                                 log.debug("Failed to parse date: {}", pubDateStr);
                             }
